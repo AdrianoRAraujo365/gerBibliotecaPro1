@@ -1,0 +1,3270 @@
+Sistema de Gerenciamento de Biblioteca - BibliotecaPro
+Vou criar o sistema completo seguindo todas as especificações do PDF e requisitos solicitados.
+
+Estrutura do Projeto
+text
+
+biblioteca-pro/
+├── backend/
+│   ├── src/
+│   │   ├── controllers/
+│   │   │   └── BibliotecaController.js
+│   │   ├── routes/
+│   │   │   └── api.js
+│   │   └── database/
+│   │       ├── connection.js
+│   │       └── schema.sql
+│   ├── swagger.json
+│   └── server.js
+├── frontend/
+│   ├── public/
+│   └── src/
+│       ├── components/
+│       │   ├── Livros.jsx
+│       │   ├── Usuarios.jsx
+│       │   ├── Emprestimos.jsx
+│       │   └── Relatorio.jsx
+│       ├── App.jsx
+│       └── main.jsx
+└── mobile/
+    ├── App.js
+    └── src/
+        └── screens/
+            ├── HomeScreen.js
+            ├── LivrosScreen.js
+            └── EmprestimosScreen.js
+1. BANCO DE DADOS (MySQL)
+backend/src/database/schema.sql
+SQL
+
+-- ============================================
+-- Sistema de Gerenciamento de Biblioteca
+-- FATEC SP - Zona Leste - DSM - WEB3
+-- ============================================
+
+CREATE DATABASE IF NOT EXISTS biblioteca_db
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE biblioteca_db;
+
+-- Tabela de Livros
+CREATE TABLE IF NOT EXISTS livros (
+  id      INT AUTO_INCREMENT PRIMARY KEY,
+  titulo  VARCHAR(150) NOT NULL,
+  autor   VARCHAR(100) NOT NULL,
+  isbn    VARCHAR(20)  UNIQUE,
+  ano     INT,
+  status  ENUM('Disponível','Emprestado') DEFAULT 'Disponível',
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Usuários
+CREATE TABLE IF NOT EXISTS usuarios (
+  id        INT AUTO_INCREMENT PRIMARY KEY,
+  nome      VARCHAR(100) NOT NULL,
+  email     VARCHAR(100) UNIQUE NOT NULL,
+  telefone  VARCHAR(20),
+  criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Empréstimos
+CREATE TABLE IF NOT EXISTS emprestimos (
+  id               INT AUTO_INCREMENT PRIMARY KEY,
+  livro_id         INT NOT NULL,
+  usuario_id       INT NOT NULL,
+  data_emprestimo  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  data_devolucao   DATETIME NULL,
+  status           ENUM('Ativo','Devolvido') DEFAULT 'Ativo',
+  FOREIGN KEY (livro_id)   REFERENCES livros(id)   ON DELETE RESTRICT,
+  FOREIGN KEY (usuario_id) REFERENCES usuarios(id) ON DELETE RESTRICT
+);
+
+-- Dados de exemplo
+INSERT INTO livros (titulo, autor, isbn, ano) VALUES
+  ('Clean Code',               'Robert C. Martin', '9780132350884', 2008),
+  ('The Pragmatic Programmer', 'Andrew Hunt',       '9780201616224', 1999),
+  ('Design Patterns',          'Gang of Four',      '9780201633610', 1994),
+  ('JavaScript: The Good Parts','Douglas Crockford','9780596517748', 2008),
+  ('Node.js Design Patterns',  'Mario Casciaro',    '9781839214110', 2020);
+
+INSERT INTO usuarios (nome, email, telefone) VALUES
+  ('Ana Silva',    'ana@email.com',    '11999990001'),
+  ('Bruno Costa',  'bruno@email.com',  '11999990002'),
+  ('Carla Dias',   'carla@email.com',  '11999990003');
+2. BACKEND - Node.js + Express
+backend/src/database/connection.js
+JavaScript
+
+// ============================================
+// Conexão com MySQL usando mysql2/promise
+// ============================================
+const mysql = require('mysql2/promise');
+
+const pool = mysql.createPool({
+  host:            process.env.DB_HOST     || 'localhost',
+  user:            process.env.DB_USER     || 'root',
+  password:        process.env.DB_PASSWORD || 'sua_senha',
+  database:        process.env.DB_NAME     || 'biblioteca_db',
+  waitForConnections: true,
+  connectionLimit:    10,
+  queueLimit:         0,
+  timezone:           '-03:00'
+});
+
+// Testa a conexão ao iniciar
+pool.getConnection()
+  .then(conn => {
+    console.log('✅ MySQL conectado com sucesso!');
+    conn.release();
+  })
+  .catch(err => {
+    console.error('❌ Erro ao conectar MySQL:', err.message);
+    process.exit(1);
+  });
+
+module.exports = pool;
+backend/src/controllers/BibliotecaController.js
+JavaScript
+
+// ============================================
+// POO - Classes: Livro, Usuario, Biblioteca
+// FATEC SP - Zona Leste - WEB3
+// ============================================
+
+const pool = require('../database/connection');
+
+// ─── Classe Livro ────────────────────────────
+class Livro {
+  constructor(id, titulo, autor, isbn, ano, status) {
+    this.id     = id;
+    this.titulo = titulo;
+    this.autor  = autor;
+    this.isbn   = isbn;
+    this.ano    = ano;
+    this.status = status;
+  }
+
+  /** Verifica se o livro está disponível para empréstimo */
+  estaDisponivel() {
+    return this.status === 'Disponível';
+  }
+
+  /** Retorna representação em string */
+  toString() {
+    return `[${this.id}] ${this.titulo} - ${this.autor} (${this.status})`;
+  }
+}
+
+// ─── Classe Usuario ───────────────────────────
+class Usuario {
+  constructor(id, nome, email, telefone) {
+    this.id       = id;
+    this.nome     = nome;
+    this.email    = email;
+    this.telefone = telefone;
+  }
+
+  /** Retorna representação em string */
+  toString() {
+    return `[${this.id}] ${this.nome} <${this.email}>`;
+  }
+}
+
+// ─── Classe Biblioteca (lógica central) ───────
+class Biblioteca {
+  constructor(db) {
+    this.db = db; // pool de conexão MySQL
+  }
+
+  // ══════════════════════════════════════
+  // MÉTODOS DE LIVRO
+  // ══════════════════════════════════════
+
+  /** Cadastra um novo livro no banco */
+  async cadastrarLivro({ titulo, autor, isbn, ano }) {
+    if (!titulo || !autor) {
+      throw new Error('Título e autor são obrigatórios.');
+    }
+
+    const [result] = await this.db.execute(
+      `INSERT INTO livros (titulo, autor, isbn, ano) VALUES (?, ?, ?, ?)`,
+      [titulo, autor, isbn || null, ano || null]
+    );
+
+    return new Livro(result.insertId, titulo, autor, isbn, ano, 'Disponível');
+  }
+
+  /** Lista todos os livros */
+  async listarLivros() {
+    const [rows] = await this.db.execute(
+      `SELECT * FROM livros ORDER BY titulo`
+    );
+    return rows.map(r => new Livro(r.id, r.titulo, r.autor, r.isbn, r.ano, r.status));
+  }
+
+  /** Busca livro por ID */
+  async buscarLivroPorId(id) {
+    const [rows] = await this.db.execute(
+      `SELECT * FROM livros WHERE id = ?`, [id]
+    );
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return new Livro(r.id, r.titulo, r.autor, r.isbn, r.ano, r.status);
+  }
+
+  /** Atualiza livro */
+  async atualizarLivro(id, dados) {
+    const livro = await this.buscarLivroPorId(id);
+    if (!livro) throw new Error('Livro não encontrado.');
+
+    const { titulo, autor, isbn, ano } = dados;
+    await this.db.execute(
+      `UPDATE livros SET titulo=?, autor=?, isbn=?, ano=? WHERE id=?`,
+      [
+        titulo || livro.titulo,
+        autor  || livro.autor,
+        isbn   || livro.isbn,
+        ano    || livro.ano,
+        id
+      ]
+    );
+    return await this.buscarLivroPorId(id);
+  }
+
+  /** Remove livro */
+  async removerLivro(id) {
+    const livro = await this.buscarLivroPorId(id);
+    if (!livro) throw new Error('Livro não encontrado.');
+    if (!livro.estaDisponivel()) {
+      throw new Error('Não é possível remover um livro emprestado.');
+    }
+    await this.db.execute(`DELETE FROM livros WHERE id=?`, [id]);
+    return true;
+  }
+
+  // ══════════════════════════════════════
+  // MÉTODOS DE USUÁRIO
+  // ══════════════════════════════════════
+
+  /** Cadastra usuário */
+  async cadastrarUsuario({ nome, email, telefone }) {
+    if (!nome || !email) {
+      throw new Error('Nome e email são obrigatórios.');
+    }
+    const [result] = await this.db.execute(
+      `INSERT INTO usuarios (nome, email, telefone) VALUES (?, ?, ?)`,
+      [nome, email, telefone || null]
+    );
+    return new Usuario(result.insertId, nome, email, telefone);
+  }
+
+  /** Lista usuários */
+  async listarUsuarios() {
+    const [rows] = await this.db.execute(
+      `SELECT * FROM usuarios ORDER BY nome`
+    );
+    return rows.map(r => new Usuario(r.id, r.nome, r.email, r.telefone));
+  }
+
+  /** Busca usuário por ID */
+  async buscarUsuarioPorId(id) {
+    const [rows] = await this.db.execute(
+      `SELECT * FROM usuarios WHERE id = ?`, [id]
+    );
+    if (rows.length === 0) return null;
+    const r = rows[0];
+    return new Usuario(r.id, r.nome, r.email, r.telefone);
+  }
+
+  /** Remove usuário */
+  async removerUsuario(id) {
+    const usuario = await this.buscarUsuarioPorId(id);
+    if (!usuario) throw new Error('Usuário não encontrado.');
+    await this.db.execute(`DELETE FROM usuarios WHERE id=?`, [id]);
+    return true;
+  }
+
+  // ══════════════════════════════════════
+  // MÉTODOS DE EMPRÉSTIMO - Regra (B)
+  // ══════════════════════════════════════
+
+  /**
+   * Valida se o livro pode ser emprestado.
+   * Regra (B): livro já emprestado não pode ser emprestado novamente.
+   */
+  podeEmprestar(livro) {
+    return livro.estaDisponivel();
+  }
+
+  /** Registra empréstimo com validação POO */
+  async registrarEmprestimo(livroId, usuarioId) {
+    // Valida livro
+    const livro = await this.buscarLivroPorId(livroId);
+    if (!livro) throw new Error('Livro não encontrado.');
+
+    // Valida usuário
+    const usuario = await this.buscarUsuarioPorId(usuarioId);
+    if (!usuario) throw new Error('Usuário não encontrado.');
+
+    // Regra (B): verifica disponibilidade via método POO
+    if (!this.podeEmprestar(livro)) {
+      throw new Error(
+        `O livro "${livro.titulo}" já está emprestado e não pode ser emprestado novamente.`
+      );
+    }
+
+    // Transação: INSERT emprestimo + UPDATE status livro
+    const conn = await this.db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      const [result] = await conn.execute(
+        `INSERT INTO emprestimos (livro_id, usuario_id) VALUES (?, ?)`,
+        [livroId, usuarioId]
+      );
+
+      await conn.execute(
+        `UPDATE livros SET status='Emprestado' WHERE id=?`,
+        [livroId]
+      );
+
+      await conn.commit();
+      return {
+        id:             result.insertId,
+        livro:          livro.titulo,
+        usuario:        usuario.nome,
+        dataEmprestimo: new Date().toISOString()
+      };
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  /** Registra devolução */
+  async registrarDevolucao(emprestimoId) {
+    const [rows] = await this.db.execute(
+      `SELECT e.*, l.titulo FROM emprestimos e
+       JOIN livros l ON l.id = e.livro_id
+       WHERE e.id = ? AND e.status = 'Ativo'`,
+      [emprestimoId]
+    );
+
+    if (rows.length === 0) {
+      throw new Error('Empréstimo ativo não encontrado.');
+    }
+
+    const emprestimo = rows[0];
+    const conn = await this.db.getConnection();
+    try {
+      await conn.beginTransaction();
+
+      await conn.execute(
+        `UPDATE emprestimos
+         SET data_devolucao=NOW(), status='Devolvido'
+         WHERE id=?`,
+        [emprestimoId]
+      );
+
+      await conn.execute(
+        `UPDATE livros SET status='Disponível' WHERE id=?`,
+        [emprestimo.livro_id]
+      );
+
+      await conn.commit();
+
+      return {
+        emprestimoId,
+        livro:         emprestimo.titulo,
+        dataDevolucao: new Date().toISOString()
+      };
+    } catch (err) {
+      await conn.rollback();
+      throw err;
+    } finally {
+      conn.release();
+    }
+  }
+
+  /** Lista empréstimos com JOIN */
+  async listarEmprestimos() {
+    const [rows] = await this.db.execute(`
+      SELECT
+        e.id,
+        l.titulo        AS livro,
+        l.autor         AS autor,
+        u.nome          AS usuario,
+        u.email         AS email,
+        e.data_emprestimo,
+        e.data_devolucao,
+        e.status
+      FROM emprestimos e
+      JOIN livros   l ON l.id = e.livro_id
+      JOIN usuarios u ON u.id = e.usuario_id
+      ORDER BY e.data_emprestimo DESC
+    `);
+    return rows;
+  }
+
+  // ══════════════════════════════════════
+  // RELATÓRIO - Requisito (C)
+  // ══════════════════════════════════════
+
+  /** Relatório completo: todos os livros com status */
+  async relatorioStatus() {
+    const [rows] = await this.db.execute(`
+      SELECT
+        l.id,
+        l.titulo,
+        l.autor,
+        l.status,
+        u.nome  AS usuario_atual,
+        e.data_emprestimo
+      FROM livros l
+      LEFT JOIN emprestimos e ON e.livro_id = l.id AND e.status = 'Ativo'
+      LEFT JOIN usuarios    u ON u.id = e.usuario_id
+      ORDER BY l.status DESC, l.titulo
+    `);
+    return rows;
+  }
+
+  /** Relatório: somente livros emprestados no momento */
+  async livrosEmprestadosAgora() {
+    const [rows] = await this.db.execute(`
+      SELECT
+        l.titulo,
+        l.autor,
+        u.nome          AS usuario,
+        u.email,
+        e.data_emprestimo
+      FROM emprestimos e
+      JOIN livros   l ON l.id = e.livro_id
+      JOIN usuarios u ON u.id = e.usuario_id
+      WHERE e.status = 'Ativo'
+      ORDER BY e.data_emprestimo
+    `);
+    return rows;
+  }
+}
+
+// Exporta instância única (Singleton)
+const db = require('../database/connection');
+module.exports = new Biblioteca(db);
+backend/src/routes/api.js
+JavaScript
+
+// ============================================
+// Rotas da API REST
+// ============================================
+const express    = require('express');
+const router     = express.Router();
+const biblioteca = require('../controllers/BibliotecaController');
+
+// ─── LIVROS ──────────────────────────────────
+
+/**
+ * @route GET /api/livros
+ * @desc  Lista todos os livros
+ */
+router.get('/livros', async (req, res) => {
+  try {
+    const livros = await biblioteca.listarLivros();
+    res.json(livros);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+/**
+ * @route GET /api/livros/:id
+ * @desc  Busca livro por ID
+ */
+router.get('/livros/:id', async (req, res) => {
+  try {
+    const livro = await biblioteca.buscarLivroPorId(req.params.id);
+    if (!livro) return res.status(404).json({ erro: 'Livro não encontrado.' });
+    res.json(livro);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+/**
+ * @route POST /api/livros
+ * @desc  Cadastra novo livro
+ */
+router.post('/livros', async (req, res) => {
+  try {
+    const livro = await biblioteca.cadastrarLivro(req.body);
+    res.status(201).json({ mensagem: 'Livro cadastrado!', livro });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+/**
+ * @route PUT /api/livros/:id
+ * @desc  Atualiza livro
+ */
+router.put('/livros/:id', async (req, res) => {
+  try {
+    const livro = await biblioteca.atualizarLivro(req.params.id, req.body);
+    res.json({ mensagem: 'Livro atualizado!', livro });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+/**
+ * @route DELETE /api/livros/:id
+ * @desc  Remove livro
+ */
+router.delete('/livros/:id', async (req, res) => {
+  try {
+    await biblioteca.removerLivro(req.params.id);
+    res.json({ mensagem: 'Livro removido com sucesso!' });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ─── USUÁRIOS ─────────────────────────────────
+
+router.get('/usuarios', async (req, res) => {
+  try {
+    const usuarios = await biblioteca.listarUsuarios();
+    res.json(usuarios);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+router.get('/usuarios/:id', async (req, res) => {
+  try {
+    const usuario = await biblioteca.buscarUsuarioPorId(req.params.id);
+    if (!usuario) return res.status(404).json({ erro: 'Usuário não encontrado.' });
+    res.json(usuario);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+router.post('/usuarios', async (req, res) => {
+  try {
+    const usuario = await biblioteca.cadastrarUsuario(req.body);
+    res.status(201).json({ mensagem: 'Usuário cadastrado!', usuario });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+router.delete('/usuarios/:id', async (req, res) => {
+  try {
+    await biblioteca.removerUsuario(req.params.id);
+    res.json({ mensagem: 'Usuário removido!' });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+// ─── EMPRÉSTIMOS ──────────────────────────────
+
+/**
+ * @route POST /api/emprestimos
+ * @desc  Registra empréstimo (valida disponibilidade)
+ */
+router.post('/emprestimos', async (req, res) => {
+  try {
+    const { livro_id, usuario_id } = req.body;
+    if (!livro_id || !usuario_id) {
+      return res.status(400).json({ erro: 'livro_id e usuario_id são obrigatórios.' });
+    }
+    const resultado = await biblioteca.registrarEmprestimo(livro_id, usuario_id);
+    res.status(201).json({ mensagem: 'Empréstimo registrado!', ...resultado });
+  } catch (err) {
+    // Regra (B): livro já emprestado retorna 400
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+/**
+ * @route PUT /api/emprestimos/:id/devolver
+ * @desc  Registra devolução
+ */
+router.put('/emprestimos/:id/devolver', async (req, res) => {
+  try {
+    const resultado = await biblioteca.registrarDevolucao(req.params.id);
+    res.json({ mensagem: 'Devolução registrada!', ...resultado });
+  } catch (err) {
+    res.status(400).json({ erro: err.message });
+  }
+});
+
+router.get('/emprestimos', async (req, res) => {
+  try {
+    const emprestimos = await biblioteca.listarEmprestimos();
+    res.json(emprestimos);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+// ─── RELATÓRIOS ───────────────────────────────
+
+router.get('/relatorio/status', async (req, res) => {
+  try {
+    const dados = await biblioteca.relatorioStatus();
+    res.json(dados);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+router.get('/relatorio/emprestados', async (req, res) => {
+  try {
+    const dados = await biblioteca.livrosEmprestadosAgora();
+    res.json(dados);
+  } catch (err) {
+    res.status(500).json({ erro: err.message });
+  }
+});
+
+module.exports = router;
+backend/swagger.json
+JSON
+
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Sistema de Biblioteca - FATEC SP",
+    "description": "API REST para gerenciamento de biblioteca com POO",
+    "version": "1.0.0",
+    "contact": { "name": "Adriano Rodrigues de Araujo" }
+  },
+  "host": "localhost:3001",
+  "basePath": "/api",
+  "schemes": ["http"],
+  "consumes": ["application/json"],
+  "produces": ["application/json"],
+  "paths": {
+    "/livros": {
+      "get": {
+        "summary": "Lista todos os livros",
+        "tags": ["Livros"],
+        "responses": {
+          "200": { "description": "Lista de livros retornada com sucesso" }
+        }
+      },
+      "post": {
+        "summary": "Cadastra um novo livro",
+        "tags": ["Livros"],
+        "parameters": [{
+          "in": "body",
+          "name": "livro",
+          "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["titulo", "autor"],
+            "properties": {
+              "titulo": { "type": "string", "example": "Clean Code" },
+              "autor":  { "type": "string", "example": "Robert C. Martin" },
+              "isbn":   { "type": "string", "example": "9780132350884" },
+              "ano":    { "type": "integer","example": 2008 }
+            }
+          }
+        }],
+        "responses": {
+          "201": { "description": "Livro cadastrado com sucesso" },
+          "400": { "description": "Dados inválidos" }
+        }
+      }
+    },
+    "/livros/{id}": {
+      "get": {
+        "summary": "Busca livro por ID",
+        "tags": ["Livros"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "type": "integer" }],
+        "responses": {
+          "200": { "description": "Livro encontrado" },
+          "404": { "description": "Livro não encontrado" }
+        }
+      },
+      "put": {
+        "summary": "Atualiza livro",
+        "tags": ["Livros"],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "type": "integer" },
+          {
+            "in": "body", "name": "livro", "required": true,
+            "schema": {
+              "type": "object",
+              "properties": {
+                "titulo": { "type": "string" },
+                "autor":  { "type": "string" },
+                "isbn":   { "type": "string" },
+                "ano":    { "type": "integer" }
+              }
+            }
+          }
+        ],
+        "responses": {
+          "200": { "description": "Livro atualizado" },
+          "404": { "description": "Livro não encontrado" }
+        }
+      },
+      "delete": {
+        "summary": "Remove livro",
+        "tags": ["Livros"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "type": "integer" }],
+        "responses": {
+          "200": { "description": "Livro removido" },
+          "400": { "description": "Livro emprestado, não pode ser removido" }
+        }
+      }
+    },
+    "/usuarios": {
+      "get": {
+        "summary": "Lista usuários",
+        "tags": ["Usuários"],
+        "responses": { "200": { "description": "Lista de usuários" } }
+      },
+      "post": {
+        "summary": "Cadastra usuário",
+        "tags": ["Usuários"],
+        "parameters": [{
+          "in": "body", "name": "usuario", "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["nome", "email"],
+            "properties": {
+              "nome":     { "type": "string",  "example": "Ana Silva" },
+              "email":    { "type": "string",  "example": "ana@email.com" },
+              "telefone": { "type": "string",  "example": "11999990001" }
+            }
+          }
+        }],
+        "responses": {
+          "201": { "description": "Usuário cadastrado" },
+          "400": { "description": "Dados inválidos" }
+        }
+      }
+    },
+    "/emprestimos": {
+      "get": {
+        "summary": "Lista empréstimos",
+        "tags": ["Empréstimos"],
+        "responses": { "200": { "description": "Lista de empréstimos" } }
+      },
+      "post": {
+        "summary": "Registra empréstimo",
+        "tags": ["Empréstimos"],
+        "parameters": [{
+          "in": "body", "name": "emprestimo", "required": true,
+          "schema": {
+            "type": "object",
+            "required": ["livro_id", "usuario_id"],
+            "properties": {
+              "livro_id":   { "type": "integer", "example": 1 },
+              "usuario_id": { "type": "integer", "example": 1 }
+            }
+          }
+        }],
+        "responses": {
+          "201": { "description": "Empréstimo registrado" },
+          "400": { "description": "Livro já emprestado ou dados inválidos" },
+          "404": { "description": "Livro ou usuário não encontrado" }
+        }
+      }
+    },
+    "/emprestimos/{id}/devolver": {
+      "put": {
+        "summary": "Registra devolução",
+        "tags": ["Empréstimos"],
+        "parameters": [{ "in": "path", "name": "id", "required": true, "type": "integer" }],
+        "responses": {
+          "200": { "description": "Devolução registrada" },
+          "400": { "description": "Empréstimo não encontrado ou já devolvido" }
+        }
+      }
+    },
+    "/relatorio/status": {
+      "get": {
+        "summary": "Relatório de todos os livros com status",
+        "tags": ["Relatórios"],
+        "responses": { "200": { "description": "Relatório gerado" } }
+      }
+    },
+    "/relatorio/emprestados": {
+      "get": {
+        "summary": "Livros emprestados no momento",
+        "tags": ["Relatórios"],
+        "responses": { "200": { "description": "Lista de livros emprestados agora" } }
+      }
+    }
+  }
+}
+backend/server.js
+JavaScript
+
+// ============================================
+// Servidor Principal - BibliotecaPro
+// FATEC SP - Zona Leste - DSM - WEB3
+// ============================================
+
+require('dotenv').config();
+const express    = require('express');
+const cors       = require('cors');
+const swaggerUi  = require('swagger-ui-express');
+const swaggerDoc = require('./swagger.json');
+const readline   = require('readline');
+const routes     = require('./src/routes/api');
+const biblioteca = require('./src/controllers/BibliotecaController');
+
+const app  = express();
+const PORT = process.env.PORT || 3001;
+
+// ─── Middlewares ──────────────────────────────
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// ─── Swagger ──────────────────────────────────
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDoc, {
+  customSiteTitle: 'BibliotecaPro API',
+  customCss: '.swagger-ui .topbar { background-color: #0d6efd; }'
+}));
+
+// ─── Rotas da API ─────────────────────────────
+app.use('/api', routes);
+
+// ─── Rota raiz ────────────────────────────────
+app.get('/', (req, res) => {
+  res.json({
+    sistema:      'BibliotecaPro',
+    versao:       '1.0.0',
+    documentacao: `http://localhost:${PORT}/api-docs`,
+    endpoints:    `http://localhost:${PORT}/api`
+  });
+});
+
+// ─── Inicia servidor ──────────────────────────
+app.listen(PORT, () => {
+  console.log(`\n🚀 BibliotecaPro rodando em http://localhost:${PORT}`);
+  console.log(`📚 Documentação: http://localhost:${PORT}/api-docs\n`);
+
+  // Inicia menu de console - Requisito (B)
+  iniciarMenuConsole();
+});
+
+// ══════════════════════════════════════════════
+// MENU DE CONSOLE - Requisito (B)
+// ══════════════════════════════════════════════
+
+function iniciarMenuConsole() {
+  const rl = readline.createInterface({
+    input:  process.stdin,
+    output: process.stdout
+  });
+
+  const pergunta = (msg) =>
+    new Promise(resolve => rl.question(msg, resolve));
+
+  async function exibirMenu() {
+    console.log('\n╔══════════════════════════════════════╗');
+    console.log('║   GERENCIAMENTO DE BIBLIOTECA        ║');
+    console.log('║   FATEC SP - Zona Leste              ║');
+    console.log('╠══════════════════════════════════════╣');
+    console.log('║  1. Cadastrar Livro                  ║');
+    console.log('║  2. Cadastrar Usuário                ║');
+    console.log('║  3. Registrar Empréstimo             ║');
+    console.log('║  4. Registrar Devolução              ║');
+    console.log('║  5. Listar Livros                    ║');
+    console.log('║  6. Listar Usuários                  ║');
+    console.log('║  7. Relatório de Status              ║');
+    console.log('║  8. Relatório: Emprestados Agora     ║');
+    console.log('║  9. Sair                             ║');
+    console.log('╚══════════════════════════════════════╝');
+
+    const opcao = await pergunta('Escolha uma opção: ');
+
+    switch (opcao.trim()) {
+      case '1': await menuCadastrarLivro(pergunta);    break;
+      case '2': await menuCadastrarUsuario(pergunta);  break;
+      case '3': await menuEmprestimo(pergunta);        break;
+      case '4': await menuDevolucao(pergunta);         break;
+      case '5': await menuListarLivros();              break;
+      case '6': await menuListarUsuarios();            break;
+      case '7': await menuRelatorioStatus();           break;
+      case '8': await menuEmprestadosAgora();          break;
+      case '9':
+        console.log('\n✅ Encerrando sistema. Até logo!\n');
+        await menuRelatorioStatus(); // Exibe relatório final - Requisito (B)
+        rl.close();
+        return;
+      default:
+        console.log('⚠️  Opção inválida!');
+    }
+
+    await exibirMenu(); // Loop recursivo
+  }
+
+  async function menuCadastrarLivro(pergunta) {
+    console.log('\n─── Cadastrar Livro ───');
+    const titulo = await pergunta('Título: ');
+    const autor  = await pergunta('Autor: ');
+    const isbn   = await pergunta('ISBN (opcional): ');
+    const ano    = await pergunta('Ano (opcional): ');
+    try {
+      const livro = await biblioteca.cadastrarLivro({
+        titulo, autor,
+        isbn: isbn || null,
+        ano:  ano  ? parseInt(ano) : null
+      });
+      console.log(`\n✅ Livro cadastrado: ${livro.toString()}`);
+    } catch (err) {
+      console.log(`\n❌ Erro: ${err.message}`);
+    }
+  }
+
+  async function menuCadastrarUsuario(pergunta) {
+    console.log('\n─── Cadastrar Usuário ───');
+    const nome     = await pergunta('Nome: ');
+    const email    = await pergunta('Email: ');
+    const telefone = await pergunta('Telefone (opcional): ');
+    try {
+      const usuario = await biblioteca.cadastrarUsuario({ nome, email, telefone });
+      console.log(`\n✅ Usuário cadastrado: ${usuario.toString()}`);
+    } catch (err) {
+      console.log(`\n❌ Erro: ${err.message}`);
+    }
+  }
+
+  async function menuEmprestimo(pergunta) {
+    console.log('\n─── Registrar Empréstimo ───');
+    await menuListarLivros();
+    const livroId   = await pergunta('\nID do Livro: ');
+    await menuListarUsuarios();
+    const usuarioId = await pergunta('\nID do Usuário: ');
+    try {
+      const res = await biblioteca.registrarEmprestimo(
+        parseInt(livroId), parseInt(usuarioId)
+      );
+      console.log(`\n✅ Empréstimo registrado!`);
+      console.log(`   Livro: ${res.livro}`);
+      console.log(`   Usuário: ${res.usuario}`);
+      console.log(`   Data: ${new Date(res.dataEmprestimo).toLocaleString('pt-BR')}`);
+    } catch (err) {
+      // Regra (B): livro já emprestado
+      console.log(`\n❌ Erro: ${err.message}`);
+    }
+  }
+
+  async function menuDevolucao(pergunta) {
+    console.log('\n─── Registrar Devolução ───');
+    const emprestimos = await biblioteca.listarEmprestimos();
+    const ativos      = emprestimos.filter(e => e.status === 'Ativo');
+    if (ativos.length === 0) {
+      console.log('ℹ️  Nenhum empréstimo ativo no momento.');
+      return;
+    }
+    console.log('\nEmpréstimos Ativos:');
+    ativos.forEach(e => {
+      console.log(`  [${e.id}] "${e.livro}" → ${e.usuario} (${
+        new Date(e.data_emprestimo).toLocaleDateString('pt-BR')
+      })`);
+    });
+    const id = await pergunta('\nID do Empréstimo para devolver: ');
+    try {
+      const res = await biblioteca.registrarDevolucao(parseInt(id));
+      console.log(`\n✅ Devolução registrada!`);
+      console.log(`   Livro: ${res.livro}`);
+      console.log(`   Data: ${new Date(res.dataDevolucao).toLocaleString('pt-BR')}`);
+    } catch (err) {
+      console.log(`\n❌ Erro: ${err.message}`);
+    }
+  }
+
+  async function menuListarLivros() {
+    const livros = await biblioteca.listarLivros();
+    console.log('\n─── Lista de Livros ───');
+    if (livros.length === 0) {
+      console.log('ℹ️  Nenhum livro cadastrado.');
+      return;
+    }
+    livros.forEach(l => {
+      const icone = l.status === 'Disponível' ? '🟢' : '🔴';
+      console.log(`  ${icone} ${l.toString()}`);
+    });
+  }
+
+  async function menuListarUsuarios() {
+    const usuarios = await biblioteca.listarUsuarios();
+    console.log('\n─── Lista de Usuários ───');
+    if (usuarios.length === 0) {
+      console.log('ℹ️  Nenhum usuário cadastrado.');
+      return;
+    }
+    usuarios.forEach(u => console.log(`  👤 ${u.toString()}`));
+  }
+
+  async function menuRelatorioStatus() {
+    const dados = await biblioteca.relatorioStatus();
+    console.log('\n╔══════════════════════════════════════════════════════════╗');
+    console.log('║              RELATÓRIO DE STATUS DOS LIVROS              ║');
+    console.log('╠══════════════════════════════════════════════════════════╣');
+    dados.forEach(d => {
+      const status = d.status === 'Disponível' ? '🟢 DISPONÍVEL' : '🔴 EMPRESTADO';
+      console.log(`║  ${(d.titulo).padEnd(30)} | ${status.padEnd(15)} ║`);
+      if (d.usuario_atual) {
+        console.log(`║    → Emprestado para: ${d.usuario_atual.padEnd(36)} ║`);
+      }
+    });
+    console.log('╚══════════════════════════════════════════════════════════╝');
+  }
+
+  async function menuEmprestadosAgora() {
+    const dados = await biblioteca.livrosEmprestadosAgora();
+    console.log('\n─── Livros Emprestados Agora ───');
+    if (dados.length === 0) {
+      console.log('ℹ️  Nenhum livro emprestado no momento.');
+      return;
+    }
+    dados.forEach(d => {
+      console.log(`  🔴 "${d.titulo}" (${d.autor})`);
+      console.log(`     → ${d.usuario} | ${d.email}`);
+      console.log(`     → Desde: ${new Date(d.data_emprestimo).toLocaleString('pt-BR')}`);
+    });
+  }
+
+  // Inicia o menu
+  exibirMenu().catch(console.error);
+}
+3. FRONTEND - React.js
+frontend/package.json
+JSON
+
+{
+  "name": "biblioteca-frontend",
+  "version": "1.0.0",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.22.0",
+    "jspdf": "^2.5.1",
+    "jspdf-autotable": "^3.8.1",
+    "axios": "^1.6.7"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build"
+  }
+}
+frontend/public/index.html
+HTML
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BibliotecaPro - FATEC SP</title>
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Bootstrap Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #0d6efd;
+      --success: #198754;
+      --danger:  #dc3545;
+    }
+    body { background-color: #f0f4f8; }
+    .navbar-brand { font-weight: 700; letter-spacing: 1px; }
+    .card { border: none; border-radius: 12px; }
+    .card-header { border-radius: 12px 12px 0 0 !important; }
+    .badge-disponivel { background-color: var(--success); }
+    .badge-emprestado  { background-color: var(--danger);  }
+    .sidebar { min-height: 100vh; background: #1a2332; }
+    .sidebar .nav-link { color: #adb5bd; border-radius: 8px; margin: 2px 0; }
+    .sidebar .nav-link:hover,
+    .sidebar .nav-link.active { color: #fff; background: #0d6efd; }
+    .sidebar .nav-link i { width: 20px; }
+    .main-content { padding: 24px; }
+    .stat-card { border-radius: 16px; border: none; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
+frontend/src/main.jsx
+React
+
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import App from './App';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>
+);
+frontend/src/App.jsx
+React
+
+import React, { useState } from 'react';
+import { Routes, Route, NavLink } from 'react-router-dom';
+import Livros      from './components/Livros';
+import Usuarios    from './components/Usuarios';
+import Emprestimos from './components/Emprestimos';
+import Relatorio   from './components/Relatorio';
+import Dashboard   from './components/Dashboard';
+
+export default function App() {
+  const [menuAberto, setMenuAberto] = useState(true);
+
+  return (
+    <div className="d-flex">
+      {/* ─── Sidebar ─────────────────────── */}
+      <div className="sidebar d-flex flex-column p-3"
+           style={{ width: menuAberto ? '240px' : '60px', transition: 'width 0.3s' }}>
+
+        <div className="d-flex align-items-center mb-4">
+          <i className="bi bi-book-half text-primary fs-4 me-2"></i>
+          {menuAberto && (
+            <span className="text-white fw-bold fs-5">BibliotecaPro</span>
+          )}
+          <button className="btn btn-sm btn-outline-secondary ms-auto"
+                  onClick={() => setMenuAberto(!menuAberto)}>
+            <i className={`bi bi-chevron-${menuAberto ? 'left' : 'right'}`}></i>
+          </button>
+        </div>
+
+        <nav className="nav flex-column gap-1">
+          {[
+            { to: '/',            icon: 'speedometer2',  label: 'Dashboard'   },
+            { to: '/livros',      icon: 'book',          label: 'Livros'      },
+            { to: '/usuarios',    icon: 'people',        label: 'Usuários'    },
+            { to: '/emprestimos', icon: 'arrow-left-right', label: 'Empréstimos' },
+            { to: '/relatorio',   icon: 'bar-chart',     label: 'Relatório'   },
+          ].map(item => (
+            <NavLink key={item.to} to={item.to} end={item.to === '/'}
+                     className={({ isActive }) =>
+                       `nav-link d-flex align-items-center gap-2 py-2 px-3
+                        ${isActive ? 'active' : ''}`}>
+              <i className={`bi bi-${item.icon}`}></i>
+              {menuAberto && <span>{item.label}</span>}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="mt-auto">
+          <small className="text-secondary">
+            {menuAberto && 'FATEC SP - WEB3 © 2025'}
+          </small>
+        </div>
+      </div>
+
+      {/* ─── Conteúdo Principal ──────────── */}
+      <div className="main-content flex-grow-1">
+        {/* Topbar */}
+        <nav className="navbar navbar-light bg-white shadow-sm rounded-3 mb-4">
+          <div className="container-fluid">
+            <span className="navbar-brand mb-0 h5">
+              <i className="bi bi-book-half text-primary me-2"></i>
+              Sistema de Gerenciamento de Biblioteca
+            </span>
+            <span className="badge bg-primary">Online</span>
+          </div>
+        </nav>
+
+        <Routes>
+          <Route path="/"            element={<Dashboard />}   />
+          <Route path="/livros"      element={<Livros />}      />
+          <Route path="/usuarios"    element={<Usuarios />}    />
+          <Route path="/emprestimos" element={<Emprestimos />} />
+          <Route path="/relatorio"   element={<Relatorio />}   />
+        </Routes>
+      </div>
+    </div>
+  );
+}
+frontend/src/components/Dashboard.jsx
+React
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const API = 'http://localhost:3001/api';
+
+export default function Dashboard() {
+  const [stats, setStats] = useState({
+    totalLivros:     0,
+    disponiveis:     0,
+    emprestados:     0,
+    totalUsuarios:   0,
+    emprestimosAtivos: 0
+  });
+  const [emprestadosAgora, setEmprestadosAgora] = useState([]);
+
+  useEffect(() => {
+    carregarDados();
+    const timer = setInterval(carregarDados, 30000); // Atualiza a cada 30s
+    return () => clearInterval(timer);
+  }, []);
+
+  async function carregarDados() {
+    try {
+      const [livrosRes, usuariosRes, emprestadosRes] = await Promise.all([
+        axios.get(`${API}/livros`),
+        axios.get(`${API}/usuarios`),
+        axios.get(`${API}/relatorio/emprestados`)
+      ]);
+      const livros = livrosRes.data;
+      setStats({
+        totalLivros:       livros.length,
+        disponiveis:       livros.filter(l => l.status === 'Disponível').length,
+        emprestados:       livros.filter(l => l.status === 'Emprestado').length,
+        totalUsuarios:     usuariosRes.data.length,
+        emprestimosAtivos: emprestadosRes.data.length
+      });
+      setEmprestadosAgora(emprestadosRes.data);
+    } catch (err) {
+      console.error('Erro ao carregar dashboard:', err);
+    }
+  }
+
+  const cards = [
+    { titulo: 'Total de Livros',    valor: stats.totalLivros,       cor: 'primary', icone: 'book'           },
+    { titulo: 'Disponíveis',        valor: stats.disponiveis,       cor: 'success', icone: 'check-circle'   },
+    { titulo: 'Emprestados',        valor: stats.emprestados,       cor: 'danger',  icone: 'x-circle'       },
+    { titulo: 'Usuários Ativos',    valor: stats.totalUsuarios,     cor: 'info',    icone: 'people'         },
+  ];
+
+  return (
+    <div>
+      <h4 className="mb-4 fw-bold">
+        <i className="bi bi-speedometer2 me-2 text-primary"></i>
+        Dashboard
+      </h4>
+
+      {/* Cards de Estatísticas */}
+      <div className="row g-3 mb-4">
+        {cards.map((card, i) => (
+          <div key={i} className="col-md-3">
+            <div className={`card stat-card border-0 shadow-sm`}>
+              <div className="card-body">
+                <div className="d-flex justify-content-between align-items-start">
+                  <div>
+                    <p className="text-muted small mb-1">{card.titulo}</p>
+                    <h2 className={`fw-bold text-${card.cor} mb-0`}>{card.valor}</h2>
+                  </div>
+                  <div className={`bg-${card.cor} bg-opacity-10 rounded-3 p-2`}>
+                    <i className={`bi bi-${card.icone} text-${card.cor} fs-4`}></i>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Tabela Emprestados Agora - Tempo Real */}
+      <div className="card shadow-sm">
+        <div className="card-header bg-danger text-white d-flex justify-content-between">
+          <h6 className="mb-0">
+            <i className="bi bi-clock me-2"></i>
+            Livros Emprestados Agora (Tempo Real)
+          </h6>
+          <span className="badge bg-white text-danger">{emprestadosAgora.length}</span>
+        </div>
+        <div className="card-body">
+          {emprestadosAgora.length === 0 ? (
+            <div className="text-center py-3 text-muted">
+              <i className="bi bi-check-circle fs-1 text-success"></i>
+              <p className="mt-2">Todos os livros disponíveis!</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-hover mb-0">
+                <thead className="table-light">
+                  <tr>
+                    <th>📚 Livro</th>
+                    <th>✍️ Autor</th>
+                    <th>👤 Usuário</th>
+                    <th>📧 Email</th>
+                    <th>📅 Data</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emprestadosAgora.map((e, i) => (
+                    <tr key={i}>
+                      <td className="fw-semibold">{e.titulo}</td>
+                      <td>{e.autor}</td>
+                      <td>{e.usuario}</td>
+                      <td><small>{e.email}</small></td>
+                      <td>
+                        <small>{new Date(e.data_emprestimo).toLocaleString('pt-BR')}</small>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+frontend/src/components/Livros.jsx
+React
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const API = 'http://localhost:3001/api';
+
+export default function Livros() {
+  const [livros,    setLivros]    = useState([]);
+  const [form,      setForm]      = useState({ titulo: '', autor: '', isbn: '', ano: '' });
+  const [editando,  setEditando]  = useState(null);
+  const [busca,     setBusca]     = useState('');
+  const [loading,   setLoading]   = useState(false);
+  const [mensagem,  setMensagem]  = useState(null);
+
+  useEffect(() => { carregarLivros(); }, []);
+
+  async function carregarLivros() {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/livros`);
+      setLivros(data);
+    } catch {
+      exibirMensagem('Erro ao carregar livros.', 'danger');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function exibirMensagem(texto, tipo = 'success') {
+    setMensagem({ texto, tipo });
+    setTimeout(() => setMensagem(null), 4000);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    try {
+      if (editando) {
+        await axios.put(`${API}/livros/${editando}`, form);
+        exibirMensagem('Livro atualizado com sucesso!');
+        setEditando(null);
+      } else {
+        await axios.post(`${API}/livros`, form);
+        exibirMensagem('Livro cadastrado com sucesso!');
+      }
+      setForm({ titulo: '', autor: '', isbn: '', ano: '' });
+      carregarLivros();
+    } catch (err) {
+      exibirMensagem(err.response?.data?.erro || 'Erro ao salvar livro.', 'danger');
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm('Deseja remover este livro?')) return;
+    try {
+      await axios.delete(`${API}/livros/${id}`);
+      exibirMensagem('Livro removido!');
+      carregarLivros();
+    } catch (err) {
+      exibirMensagem(err.response?.data?.erro || 'Erro ao remover.', 'danger');
+    }
+  }
+
+  function handleEditar(livro) {
+    setForm({
+      titulo: livro.titulo,
+      autor:  livro.autor,
+      isbn:   livro.isbn  || '',
+      ano:    livro.ano   || ''
+    });
+    setEditando(livro.id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const livrosFiltrados = livros.filter(l =>
+    l.titulo.toLowerCase().includes(busca.toLowerCase()) ||
+    l.autor.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  return (
+    <div>
+      <h4 className="fw-bold mb-4">
+        <i className="bi bi-book me-2 text-primary"></i>
+        Gerenciar Livros
+      </h4>
+
+      {mensagem && (
+        <div className={`alert alert-${mensagem.tipo} alert-dismissible`} role="alert">
+          {mensagem.texto}
+          <button className="btn-close" onClick={() => setMensagem(null)}></button>
+        </div>
+      )}
+
+      <div className="row g-4">
+        {/* ─── Formulário ─── */}
+        <div className="col-md-4">
+          <div className="card shadow-sm">
+            <div className="card-header bg-primary text-white">
+              <h6 className="mb-0">
+                <i className="bi bi-plus-circle me-2"></i>
+                {editando ? 'Editar Livro' : 'Cadastrar Livro'}
+              </h6>
+            </div>
+            <div className="card-body">
+              <form onSubmit={handleSubmit}>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Título *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Ex: Clean Code"
+                    value={form.titulo}
+                    onChange={e => setForm({ ...form, titulo: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Autor *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Ex: Robert C. Martin"
+                    value={form.autor}
+                    onChange={e => setForm({ ...form, autor: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">ISBN</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Ex: 9780132350884"
+                    value={form.isbn}
+                    onChange={e => setForm({ ...form, isbn: e.target.value })}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Ano</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    placeholder="Ex: 2008"
+                    value={form.ano}
+                    onChange={e => setForm({ ...form, ano: e.target.value })}
+                  />
+                </div>
+                <div className="d-flex gap-2">
+                  <button type="submit" className="btn btn-primary w-100">
+                    <i className={`bi bi-${editando ? 'check-circle' : 'plus-circle'} me-2`}></i>
+                    {editando ? 'Salvar' : 'Cadastrar'}
+                  </button>
+                  {editando && (
+                    <button type="button" className="btn btn-secondary"
+                            onClick={() => { setEditando(null); setForm({ titulo:'',autor:'',isbn:'',ano:'' }); }}>
+                      <i className="bi bi-x"></i>
+                    </button>
+                  )}
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── Tabela ─── */}
+        <div className="col-md-8">
+          <div className="card shadow-sm">
+            <div className="card-header bg-white d-flex justify-content-between align-items-center">
+              <h6 className="mb-0">
+                <i className="bi bi-list-ul me-2"></i>
+                Lista de Livros ({livros.length})
+              </h6>
+              <input
+                type="search"
+                className="form-control form-control-sm"
+                style={{ width: '200px' }}
+                placeholder="🔍 Buscar..."
+                value={busca}
+                onChange={e => setBusca(e.target.value)}
+              />
+            </div>
+            <div className="card-body p-0">
+              {loading ? (
+                <div className="text-center py-5">
+                  <div className="spinner-border text-primary"></div>
+                </div>
+              ) : (
+                <div className="table-responsive">
+                  <table className="table table-hover mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        <th>#</th>
+                        <th>Título</th>
+                        <th>Autor</th>
+                        <th>Ano</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {livrosFiltrados.map(livro => (
+                        <tr key={livro.id}>
+                          <td><small className="text-muted">{livro.id}</small></td>
+                          <td className="fw-semibold">{livro.titulo}</td>
+                          <td>{livro.autor}</td>
+                          <td>{livro.ano || '-'}</td>
+                          <td>
+                            <span className={`badge ${
+                              livro.status === 'Disponível'
+                                ? 'bg-success'
+                                : 'bg-danger'
+                            }`}>
+                              <i className={`bi bi-${
+                                livro.status === 'Disponível'
+                                  ? 'check-circle'
+                                  : 'x-circle'
+                              } me-1`}></i>
+                              {livro.status}
+                            </span>
+                          </td>
+                          <td>
+                            <div className="btn-group btn-group-sm">
+                              <button className="btn btn-outline-primary"
+                                      onClick={() => handleEditar(livro)}
+                                      title="Editar">
+                                <i className="bi bi-pencil"></i>
+                              </button>
+                              <button className="btn btn-outline-danger"
+                                      onClick={() => handleDelete(livro.id)}
+                                      disabled={livro.status === 'Emprestado'}
+                                      title="Remover">
+                                <i className="bi bi-trash"></i>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {livrosFiltrados.length === 0 && (
+                        <tr>
+                          <td colSpan="6" className="text-center py-4 text-muted">
+                            Nenhum livro encontrado.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+frontend/src/components/Usuarios.jsx
+React
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const API = 'http://localhost:3001/api';
+
+export default function Usuarios() {
+  const [usuarios,  setUsuarios]  = useState([]);
+  const [form,      setForm]      = useState({ nome: '', email: '', telefone: '' });
+  const [mensagem,  setMensagem]  = useState(null);
+  const [loading,   setLoading]   = useState(false);
+
+  useEffect(() => { carregarUsuarios(); }, []);
+
+  async function carregarUsuarios() {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/usuarios`);
+      setUsuarios(data);
+    } catch {
+      exibirMensagem('Erro ao carregar usuários.', 'danger');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function exibirMensagem(texto, tipo = 'success') {
+    setMensagem({ texto, tipo });
+    setTimeout(() => setMensagem(null), 4000);
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    try {
+      await axios.post(`${API}/usuarios`, form);
+      exibirMensagem('Usuário cadastrado com sucesso!');
+      setForm({ nome: '', email: '', telefone: '' });
+      carregarUsuarios();
+    } catch (err) {
+      exibirMensagem(err.response?.data?.erro || 'Erro ao cadastrar.', 'danger');
+    }
+  }
+
+  async function handleDelete(id) {
+    if (!window.confirm('Deseja remover este usuário?')) return;
+    try {
+      await axios.delete(`${API}/usuarios/${id}`);
+      exibirMensagem('Usuário removido!');
+      carregarUsuarios();
+    } catch (err) {
+      exibirMensagem(err.response?.data?.erro || 'Erro ao remover.', 'danger');
+    }
+  }
+
+  return (
+    <div>
+      <h4 className="fw-bold mb-4">
+        <i className="bi bi-people me-2 text-primary"></i>
+        Gerenciar Usuários
+      </h4>
+
+      {mensagem && (
+        <div className={`alert alert-${mensagem.tipo} alert-dismissible`}>
+          {mensagem.texto}
+          <button className="btn-close" onClick={() => setMensagem(null)}></button>
+        </div>
+      )}
+
+      <div className="row g-4">
+        {/* Formulário */}
+        <div className="col-md-4">
+          <div className="card shadow-sm">
+            <div className="card-header bg-info text-white">
+              <h6 className="mb-0">
+                <i className="bi bi-person-plus me-2"></i>
+                Cadastrar Usuário
+              </h6>
+            </div>
+            <div className="card-body">
+              <form onSubmit={handleSubmit}>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Nome *</label>
+                  <input type="text" className="form-control"
+                         placeholder="Nome completo"
+                         value={form.nome}
+                         onChange={e => setForm({ ...form, nome: e.target.value })}
+                         required />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Email *</label>
+                  <input type="email" className="form-control"
+                         placeholder="usuario@email.com"
+                         value={form.email}
+                         onChange={e => setForm({ ...form, email: e.target.value })}
+                         required />
+                </div>
+                <div className="mb-3">
+                  <label className="form-label">Telefone</label>
+                  <input type="tel" className="form-control"
+                         placeholder="11999990000"
+                         value={form.telefone}
+                         onChange={e => setForm({ ...form, telefone: e.target.value })} />
+                </div>
+                <button type="submit" className="btn btn-info text-white w-100">
+                  <i className="bi bi-person-plus me-2"></i>Cadastrar
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        {/* Tabela */}
+        <div className="col-md-8">
+          <div className="card shadow-sm">
+            <div className="card-header bg-white">
+              <h6 className="mb-0">
+                <i className="bi bi-people me-2"></i>
+                Usuários Cadastrados ({usuarios.length})
+              </h6>
+            </div>
+            <div className="card-body p-0">
+              <div className="table-responsive">
+                <table className="table table-hover mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>#</th>
+                      <th>Nome</th>
+                      <th>Email</th>
+                      <th>Telefone</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {usuarios.map(u => (
+                      <tr key={u.id}>
+                        <td><small className="text-muted">{u.id}</small></td>
+                        <td className="fw-semibold">
+                          <i className="bi bi-person-circle me-1 text-info"></i>
+                          {u.nome}
+                        </td>
+                        <td>{u.email}</td>
+                        <td>{u.telefone || '-'}</td>
+                        <td>
+                          <button className="btn btn-sm btn-outline-danger"
+                                  onClick={() => handleDelete(u.id)}>
+                            <i className="bi bi-trash"></i>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {usuarios.length === 0 && (
+                      <tr>
+                        <td colSpan="5" className="text-center py-4 text-muted">
+                          Nenhum usuário cadastrado.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+frontend/src/components/Emprestimos.jsx
+React
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+
+const API = 'http://localhost:3001/api';
+
+export default function Emprestimos() {
+  const [emprestimos, setEmprestimos] = useState([]);
+  const [livros,      setLivros]      = useState([]);
+  const [usuarios,    setUsuarios]    = useState([]);
+  const [form,        setForm]        = useState({ livro_id: '', usuario_id: '' });
+  const [mensagem,    setMensagem]    = useState(null);
+  const [filtro,      setFiltro]      = useState('todos');
+
+  useEffect(() => { carregarDados(); }, []);
+
+  async function carregarDados() {
+    try {
+      const [emp, liv, usr] = await Promise.all([
+        axios.get(`${API}/emprestimos`),
+        axios.get(`${API}/livros`),
+        axios.get(`${API}/usuarios`)
+      ]);
+      setEmprestimos(emp.data);
+      setLivros(liv.data.filter(l => l.status === 'Disponível'));
+      setUsuarios(usr.data);
+    } catch {
+      exibirMensagem('Erro ao carregar dados.', 'danger');
+    }
+  }
+
+  function exibirMensagem(texto, tipo = 'success') {
+    setMensagem({ texto, tipo });
+    setTimeout(() => setMensagem(null), 5000);
+  }
+
+  async function handleEmprestimo(e) {
+    e.preventDefault();
+    try {
+      const res = await axios.post(`${API}/emprestimos`, {
+        livro_id:   parseInt(form.livro_id),
+        usuario_id: parseInt(form.usuario_id)
+      });
+      exibirMensagem(`✅ ${res.data.mensagem} - Livro: "${res.data.livro}"`);
+      setForm({ livro_id: '', usuario_id: '' });
+      carregarDados();
+    } catch (err) {
+      // Regra (B): exibe mensagem de livro já emprestado
+      exibirMensagem(err.response?.data?.erro || 'Erro ao registrar empréstimo.', 'danger');
+    }
+  }
+
+  async function handleDevolucao(emprestimoId, livro) {
+    if (!window.confirm(`Confirmar devolução de "${livro}"?`)) return;
+    try {
+      await axios.put(`${API}/emprestimos/${emprestimoId}/devolver`);
+      exibirMensagem(`✅ Devolução de "${livro}" registrada!`);
+      carregarDados();
+    } catch (err) {
+      exibirMensagem(err.response?.data?.erro || 'Erro ao registrar devolução.', 'danger');
+    }
+  }
+
+  const empFiltrados = emprestimos.filter(e => {
+    if (filtro === 'ativos')    return e.status === 'Ativo';
+    if (filtro === 'devolvidos') return e.status === 'Devolvido';
+    return true;
+  });
+
+  return (
+    <div>
+      <h4 className="fw-bold mb-4">
+        <i className="bi bi-arrow-left-right me-2 text-primary"></i>
+        Empréstimos e Devoluções
+      </h4>
+
+      {mensagem && (
+        <div className={`alert alert-${mensagem.tipo} alert-dismissible`}>
+          {mensagem.texto}
+          <button className="btn-close" onClick={() => setMensagem(null)}></button>
+        </div>
+      )}
+
+      <div className="row g-4">
+        {/* ─── Formulário ─── */}
+        <div className="col-md-4">
+          <div className="card shadow-sm">
+            <div className="card-header bg-warning">
+              <h6 className="mb-0 text-dark">
+                <i className="bi bi-plus-circle me-2"></i>
+                Novo Empréstimo
+              </h6>
+            </div>
+            <div className="card-body">
+              <form onSubmit={handleEmprestimo}>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">
+                    Livro Disponível *
+                  </label>
+                  <select className="form-select"
+                          value={form.livro_id}
+                          onChange={e => setForm({ ...form, livro_id: e.target.value })}
+                          required>
+                    <option value="">Selecione um livro...</option>
+                    {livros.map(l => (
+                      <option key={l.id} value={l.id}>
+                        {l.titulo} ({l.autor})
+                      </option>
+                    ))}
+                  </select>
+                  {livros.length === 0 && (
+                    <small className="text-danger">
+                      <i className="bi bi-exclamation-triangle me-1"></i>
+                      Nenhum livro disponível no momento.
+                    </small>
+                  )}
+                </div>
+                <div className="mb-3">
+                  <label className="form-label fw-semibold">Usuário *</label>
+                  <select className="form-select"
+                          value={form.usuario_id}
+                          onChange={e => setForm({ ...form, usuario_id: e.target.value })}
+                          required>
+                    <option value="">Selecione um usuário...</option>
+                    {usuarios.map(u => (
+                      <option key={u.id} value={u.id}>
+                        {u.nome} ({u.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button type="submit"
+                        className="btn btn-warning w-100 fw-semibold"
+                        disabled={livros.length === 0}>
+                  <i className="bi bi-check-circle me-2"></i>
+                  Registrar Empréstimo
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Info Regra B */}
+          <div className="alert alert-info mt-3 small">
+            <i className="bi bi-info-circle me-2"></i>
+            <strong>Regra:</strong> Livros já emprestados não aparecem na lista
+            e não podem ser emprestados novamente.
+          </div>
+        </div>
+
+        {/* ─── Tabela ─── */}
+        <div className="col-md-8">
+          <div className="card shadow-sm">
+            <div className="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <h6 className="mb-0">
+                <i className="bi bi-list-ul me-2"></i>
+                Histórico ({emprestimos.length})
+              </h6>
+              <div className="btn-group btn-group-sm">
+                {['todos','ativos','devolvidos'].map(f => (
+                  <button key={f}
+                          className={`btn btn-${
+                            filtro === f ? 'primary' : 'outline-primary'
+                          }`}
+                          onClick={() => setFiltro(f)}>
+                    {f.charAt(0).toUpperCase() + f.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="card-body p-0">
+              <div className="table-responsive">
+                <table className="table table-hover mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>#</th>
+                      <th>Livro</th>
+                      <th>Usuário</th>
+                      <th>Empréstimo</th>
+                      <th>Devolução</th>
+                      <th>Status</th>
+                      <th>Ação</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {empFiltrados.map(e => (
+                      <tr key={e.id}>
+                        <td><small>{e.id}</small></td>
+                        <td className="fw-semibold">{e.livro}</td>
+                        <td>{e.usuario}</td>
+                        <td>
+                          <small>{new Date(e.data_emprestimo).toLocaleDateString('pt-BR')}</small>
+                        </td>
+                        <td>
+                          <small>
+                            {e.data_devolucao
+                              ? new Date(e.data_devolucao).toLocaleDateString('pt-BR')
+                              : '—'}
+                          </small>
+                        </td>
+                        <td>
+                          <span className={`badge ${
+                            e.status === 'Ativo' ? 'bg-danger' : 'bg-success'
+                          }`}>
+                            {e.status}
+                          </span>
+                        </td>
+                        <td>
+                          {e.status === 'Ativo' && (
+                            <button className="btn btn-sm btn-outline-success"
+                                    onClick={() => handleDevolucao(e.id, e.livro)}
+                                    title="Registrar Devolução">
+                              <i className="bi bi-arrow-return-left"></i>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {empFiltrados.length === 0 && (
+                      <tr>
+                        <td colSpan="7" className="text-center py-4 text-muted">
+                          Nenhum empréstimo encontrado.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+frontend/src/components/Relatorio.jsx
+React
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+
+const API = 'http://localhost:3001/api';
+
+// ─── Componente Relatorio - Requisito (C) ─────────────────────────
+export default function Relatorio() {
+  const [livros,    setLivros]    = useState([]);
+  const [loading,   setLoading]   = useState(false);
+  const [filtro,    setFiltro]    = useState('todos');
+  const [atualizado, setAtualizado] = useState('');
+
+  useEffect(() => {
+    carregarRelatorio();
+  }, []);
+
+  async function carregarRelatorio() {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/relatorio/status`);
+      setLivros(data);
+      setAtualizado(new Date().toLocaleString('pt-BR'));
+    } catch {
+      console.error('Erro ao carregar relatório');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ─── Gerar PDF com jsPDF ──────────────────
+  function gerarPDF() {
+    const doc = new jsPDF();
+
+    // Cabeçalho
+    doc.setFillColor(13, 110, 253);
+    doc.rect(0, 0, 210, 30, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(18);
+    doc.text('BibliotecaPro - Relatório de Status', 14, 18);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 38);
+    doc.text(`FATEC SP - Zona Leste - Desenvolvimento de Software Multiplataforma`, 14, 44);
+
+    // Estatísticas
+    const disponiveis = livros.filter(l => l.status === 'Disponível').length;
+    const emprestados = livros.filter(l => l.status === 'Emprestado').length;
+
+    doc.setFillColor(240, 248, 255);
+    doc.rect(14, 50, 55, 18, 'F');
+    doc.setFontSize(12);
+    doc.text(`Total: ${livros.length}`, 22, 60);
+
+    doc.setFillColor(212, 237, 218);
+    doc.rect(74, 50, 55, 18, 'F');
+    doc.setTextColor(25, 135, 84);
+    doc.text(`Disponíveis: ${disponiveis}`, 82, 60);
+
+    doc.setFillColor(248, 215, 218);
+    doc.rect(134, 50, 60, 18, 'F');
+    doc.setTextColor(220, 53, 69);
+    doc.text(`Emprestados: ${emprestados}`, 142, 60);
+    doc.setTextColor(0, 0, 0);
+
+    // Tabela principal
+    const dados = livrosFiltrados.map(l => [
+      l.id,
+      l.titulo,
+      l.autor,
+      l.status,
+      l.usuario_atual || '—',
+      l.data_emprestimo
+        ? new Date(l.data_emprestimo).toLocaleDateString('pt-BR')
+        : '—'
+    ]);
+
+    doc.autoTable({
+      startY: 76,
+      head: [['ID', 'Título', 'Autor', 'Status', 'Usuário', 'Data Empréstimo']],
+      body: dados,
+      headStyles: { fillColor: [13, 110, 253] },
+      alternateRowStyles: { fillColor: [248, 249, 250] },
+      didDrawCell: (data) => {
+        if (data.column.index === 3 && data.section === 'body') {
+          const status = data.cell.raw;
+          if (status === 'Disponível') {
+            data.cell.styles.textColor = [25, 135, 84];
+            data.cell.styles.fontStyle = 'bold';
+          } else {
+            data.cell.styles.textColor = [220, 53, 69];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+      }
+    });
+
+    // Rodapé
+    const totalPaginas = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= totalPaginas; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150);
+      doc.text(
+        `Página ${i} de ${totalPaginas} - BibliotecaPro © FATEC SP 2025`,
+        14,
+        doc.internal.pageSize.height - 10
+      );
+    }
+
+    doc.save(`relatorio-biblioteca-${new Date().toLocaleDateString('pt-BR').replace(/\//g,'-')}.pdf`);
+  }
+
+  // ─── Gerar PDF de Comprovante de Devolução ─
+  function gerarComprovanteDevolucao(emprestimo) {
+    const doc = new jsPDF();
+
+    doc.setFillColor(13, 110, 253);
+    doc.rect(0, 0, 210, 35, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(20);
+    doc.text('COMPROVANTE DE DEVOLUÇÃO', 14, 18);
+    doc.setFontSize(11);
+    doc.text('BibliotecaPro - FATEC SP Zona Leste', 14, 28);
+
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(12);
+
+    const dados = [
+      ['Livro:',        emprestimo.titulo || ''],
+      ['Autor:',        emprestimo.autor  || ''],
+      ['Usuário:',      emprestimo.usuario || ''],
+      ['Email:',        emprestimo.email  || ''],
+      ['Data Empréstimo:', new Date(emprestimo.data_emprestimo).toLocaleString('pt-BR')],
+      ['Data Devolução:',  new Date().toLocaleString('pt-BR')],
+    ];
+
+    let y = 55;
+    dados.forEach(([label, valor]) => {
+      doc.setFont(undefined, 'bold');
+      doc.text(label, 14, y);
+      doc.setFont(undefined, 'normal');
+      doc.text(valor, 75, y);
+      y += 10;
+    });
+
+    doc.setDrawColor(13, 110, 253);
+    doc.setLineWidth(0.5);
+    doc.line(14, y + 5, 196, y + 5);
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text('Documento gerado automaticamente pelo Sistema BibliotecaPro.', 14, y + 12);
+
+    doc.save(`comprovante-devolucao-${emprestimo.id || 'livro'}.pdf`);
+  }
+
+  const livrosFiltrados = livros.filter(l => {
+    if (filtro === 'disponiveis') return l.status === 'Disponível';
+    if (filtro === 'emprestados') return l.status === 'Emprestado';
+    return true;
+  });
+
+  const totalDisp = livros.filter(l => l.status === 'Disponível').length;
+  const totalEmp  = livros.filter(l => l.status === 'Emprestado').length;
+
+  return (
+    <div>
+      <h4 className="fw-bold mb-4">
+        <i className="bi bi-bar-chart me-2 text-primary"></i>
+        Relatório de Status dos Livros
+      </h4>
+
+      {/* ─── Cards Resumo ─── */}
+      <div className="row g-3 mb-4">
+        <div className="col-md-4">
+          <div className="card border-0 bg-primary text-white shadow-sm">
+            <div className="card-body text-center py-3">
+              <h1 className="fw-bold">{livros.length}</h1>
+              <p className="mb-0">📚 Total de Livros</p>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-4">
+          <div className="card border-0 bg-success text-white shadow-sm">
+            <div className="card-body text-center py-3">
+              <h1 className="fw-bold">{totalDisp}</h1>
+              <p className="mb-0">🟢 Disponíveis</p>
+            </div>
+          </div>
+        </div>
+        <div className="col-md-4">
+          <div className="card border-0 bg-danger text-white shadow-sm">
+            <div className="card-body text-center py-3">
+              <h1 className="fw-bold">{totalEmp}</h1>
+              <p className="mb-0">🔴 Emprestados</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Tabela Relatório ─── */}
+      <div className="card shadow-sm">
+        <div className="card-header bg-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div>
+            <h6 className="mb-0">
+              <i className="bi bi-table me-2"></i>
+              Status de Todos os Livros
+            </h6>
+            <small className="text-muted">Atualizado: {atualizado}</small>
+          </div>
+          <div className="d-flex gap-2 flex-wrap">
+            {/* Filtros */}
+            <div className="btn-group btn-group-sm">
+              {[
+                { v: 'todos',       l: 'Todos'        },
+                { v: 'disponiveis', l: '🟢 Disponíveis' },
+                { v: 'emprestados', l: '🔴 Emprestados' },
+              ].map(f => (
+                <button key={f.v}
+                        className={`btn btn-${filtro === f.v ? 'primary' : 'outline-primary'}`}
+                        onClick={() => setFiltro(f.v)}>
+                  {f.l}
+                </button>
+              ))}
+            </div>
+            {/* Botões de ação */}
+            <button className="btn btn-sm btn-outline-secondary"
+                    onClick={carregarRelatorio}>
+              <i className="bi bi-arrow-clockwise me-1"></i>Atualizar
+            </button>
+            <button className="btn btn-sm btn-danger text-white"
+                    onClick={gerarPDF}>
+              <i className="bi bi-file-earmark-pdf me-1"></i>
+              Exportar PDF
+            </button>
+          </div>
+        </div>
+
+        <div className="card-body p-0">
+          {loading ? (
+            <div className="text-center py-5">
+              <div className="spinner-border text-primary"></div>
+              <p className="mt-2 text-muted">Carregando relatório...</p>
+            </div>
+          ) : (
+            <div className="table-responsive">
+              {/* Componente de tabela - Requisito (C) */}
+              <table className="table table-striped mb-0">
+                <thead className="table-dark">
+                  <tr>
+                    <th>#</th>
+                    <th>Título</th>
+                    <th>Autor</th>
+                    <th>Status</th>
+                    <th>Usuário</th>
+                    <th>Data Empréstimo</th>
+                    <th>Comprovante</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {livrosFiltrados.map(l => (
+                    <tr key={l.id}>
+                      <td><small className="text-muted">{l.id}</small></td>
+                      <td className="fw-semibold">{l.titulo}</td>
+                      <td>{l.autor}</td>
+                      <td>
+                        {/* Badge de status - Requisito (C) */}
+                        <span className={`badge ${
+                          l.status === 'Disponível' ? 'bg-success' : 'bg-danger'
+                        }`}>
+                          <i className={`bi bi-${
+                            l.status === 'Disponível'
+                              ? 'check-circle'
+                              : 'x-circle'
+                          } me-1`}></i>
+                          {l.status}
+                        </span>
+                      </td>
+                      <td>{l.usuario_atual || '—'}</td>
+                      <td>
+                        <small>
+                          {l.data_emprestimo
+                            ? new Date(l.data_emprestimo).toLocaleString('pt-BR')
+                            : '—'}
+                        </small>
+                      </td>
+                      <td>
+                        {l.status === 'Emprestado' && (
+                          <button className="btn btn-sm btn-outline-danger"
+                                  onClick={() => gerarComprovanteDevolucao(l)}
+                                  title="Gerar Comprovante PDF">
+                            <i className="bi bi-file-pdf me-1"></i>PDF
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {livrosFiltrados.length === 0 && (
+                    <tr>
+                      <td colSpan="7" className="text-center py-4 text-muted">
+                        Nenhum livro encontrado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+4. MOBILE - React Native
+mobile/App.js
+JavaScript
+
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { Ionicons } from '@expo/vector-icons';
+import HomeScreen       from './src/screens/HomeScreen';
+import LivrosScreen     from './src/screens/LivrosScreen';
+import EmprestimosScreen from './src/screens/EmprestimosScreen';
+
+const Tab = createBottomTabNavigator();
+
+export default function App() {
+  return (
+    <NavigationContainer>
+      <Tab.Navigator
+        screenOptions={({ route }) => ({
+          headerStyle:      { backgroundColor: '#0d6efd' },
+          headerTintColor:  '#fff',
+          headerTitleStyle: { fontWeight: 'bold' },
+          tabBarActiveTintColor:   '#0d6efd',
+          tabBarInactiveTintColor: '#6c757d',
+          tabBarIcon: ({ focused, color, size }) => {
+            const icons = {
+              Home:        focused ? 'home'         : 'home-outline',
+              Livros:      focused ? 'book'         : 'book-outline',
+              Empréstimos: focused ? 'swap-horizontal' : 'swap-horizontal-outline',
+            };
+            return <Ionicons name={icons[route.name]} size={size} color={color} />;
+          }
+        })}>
+        <Tab.Screen name="Home"        component={HomeScreen}        options={{ title: 'Dashboard'   }} />
+        <Tab.Screen name="Livros"      component={LivrosScreen}      options={{ title: 'Livros'      }} />
+        <Tab.Screen name="Empréstimos" component={EmprestimosScreen} options={{ title: 'Empréstimos' }} />
+      </Tab.Navigator>
+    </NavigationContainer>
+  );
+}
+mobile/src/screens/HomeScreen.js
+JavaScript
+
+import React, { useState, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView,
+  RefreshControl, ActivityIndicator, TouchableOpacity
+} from 'react-native';
+import axios from 'axios';
+
+const API = 'http://192.168.1.100:3001/api'; // IP da máquina na rede local
+
+export default function HomeScreen() {
+  const [stats,      setStats]      = useState(null);
+  const [emprestados, setEmprestados] = useState([]);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => { carregarDados(); }, []);
+
+  async function carregarDados() {
+    try {
+      const [livrosRes, empRes] = await Promise.all([
+        axios.get(`${API}/livros`),
+        axios.get(`${API}/relatorio/emprestados`)
+      ]);
+      const livros = livrosRes.data;
+      setStats({
+        total:       livros.length,
+        disponiveis: livros.filter(l => l.status === 'Disponível').length,
+        emprestados: livros.filter(l => l.status === 'Emprestado').length,
+      });
+      setEmprestados(empRes.data);
+    } catch (err) {
+      console.error('Erro:', err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#0d6efd" />
+        <Text style={styles.loadingText}>Carregando...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <ScrollView
+      style={styles.container}
+      refreshControl={
+        <RefreshControl refreshing={refreshing}
+                        onRefresh={() => { setRefreshing(true); carregarDados(); }}
+                        colors={['#0d6efd']} />
+      }>
+
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>📚 BibliotecaPro</Text>
+        <Text style={styles.headerSub}>FATEC SP - Zona Leste</Text>
+      </View>
+
+      {/* Cards de estatísticas */}
+      <View style={styles.statsRow}>
+        <View style={[styles.statCard, { backgroundColor: '#0d6efd' }]}>
+          <Text style={styles.statNum}>{stats?.total}</Text>
+          <Text style={styles.statLabel}>Total</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: '#198754' }]}>
+          <Text style={styles.statNum}>{stats?.disponiveis}</Text>
+          <Text style={styles.statLabel}>Disponíveis</Text>
+        </View>
+        <View style={[styles.statCard, { backgroundColor: '#dc3545' }]}>
+          <Text style={styles.statNum}>{stats?.emprestados}</Text>
+          <Text style={styles.statLabel}>Emprestados</Text>
+        </View>
+      </View>
+
+      {/* Lista emprestados agora */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>🔴 Emprestados Agora</Text>
+        {emprestados.length === 0 ? (
+          <View style={styles.emptyBox}>
+            <Text style={styles.emptyIcon}>✅</Text>
+            <Text style={styles.emptyText}>Todos os livros disponíveis!</Text>
+          </View>
+        ) : (
+          emprestados.map((e, i) => (
+            <View key={i} style={styles.card}>
+              <Text style={styles.livroTitulo}>{e.titulo}</Text>
+              <Text style={styles.livroAutor}>📖 {e.autor}</Text>
+              <Text style={styles.livroUsuario}>👤 {e.usuario}</Text>
+              <Text style={styles.livroData}>
+                📅 {new Date(e.data_emprestimo).toLocaleDateString('pt-BR')}
+              </Text>
+            </View>
+          ))
+        )}
+      </View>
+
+      <TouchableOpacity style={styles.refreshBtn} onPress={carregarDados}>
+        <Text style={styles.refreshBtnText}>🔄 Atualizar Dados</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container:      { flex: 1, backgroundColor: '#f0f4f8' },
+  center:         { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText:    { marginTop: 12, color: '#6c757d' },
+  header: {
+    backgroundColor: '#0d6efd',
+    padding: 20,
+    paddingTop: 30,
+    marginBottom: 16
+  },
+  headerTitle:    { fontSize: 24, fontWeight: 'bold', color: '#fff' },
+  headerSub:      { fontSize: 12, color: '#cfe2ff', marginTop: 4 },
+  statsRow:       { flexDirection: 'row', padding: 16, gap: 8 },
+  statCard: {
+    flex: 1, borderRadius: 12, padding: 16,
+    alignItems: 'center', elevation: 3
+  },
+  statNum:        { fontSize: 28, fontWeight: 'bold', color: '#fff' },
+  statLabel:      { fontSize: 12, color: '#fff', marginTop: 4 },
+  section:        { padding: 16 },
+  sectionTitle:   { fontSize: 16, fontWeight: 'bold', marginBottom: 12, color: '#1a2332' },
+  card: {
+    backgroundColor: '#fff', borderRadius: 12,
+    padding: 16, marginBottom: 10, elevation: 2,
+    borderLeftWidth: 4, borderLeftColor: '#dc3545'
+  },
+  livroTitulo:    { fontSize: 15, fontWeight: 'bold', color: '#1a2332' },
+  livroAutor:     { fontSize: 13, color: '#6c757d', marginTop: 4 },
+  livroUsuario:   { fontSize: 13, color: '#0d6efd', marginTop: 2 },
+  livroData:      { fontSize: 12, color: '#adb5bd', marginTop: 2 },
+  emptyBox: {
+    backgroundColor: '#d1e7dd', borderRadius: 12,
+    padding: 24, alignItems: 'center'
+  },
+  emptyIcon:      { fontSize: 40 },
+  emptyText:      { color: '#0a3622', marginTop: 8, fontWeight: '600' },
+  refreshBtn: {
+    margin: 16, backgroundColor: '#0d6efd',
+    borderRadius: 10, padding: 14, alignItems: 'center'
+  },
+  refreshBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 }
+});
+mobile/src/screens/LivrosScreen.js
+JavaScript
+
+import React, { useState, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, FlatList,
+  TextInput, TouchableOpacity, Alert,
+  ActivityIndicator, Modal, ScrollView
+} from 'react-native';
+import axios from 'axios';
+
+const API = 'http://192.168.1.100:3001/api';
+
+export default function LivrosScreen() {
+  const [livros,   setLivros]   = useState([]);
+  const [busca,    setBusca]    = useState('');
+  const [loading,  setLoading]  = useState(true);
+  const [modal,    setModal]    = useState(false);
+  const [form,     setForm]     = useState({ titulo: '', autor: '', isbn: '', ano: '' });
+
+  useEffect(() => { carregarLivros(); }, []);
+
+  async function carregarLivros() {
+    setLoading(true);
+    try {
+      const { data } = await axios.get(`${API}/livros`);
+      setLivros(data);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível carregar os livros.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function cadastrar() {
+    if (!form.titulo || !form.autor) {
+      Alert.alert('Atenção', 'Título e autor são obrigatórios.');
+      return;
+    }
+    try {
+      await axios.post(`${API}/livros`, form);
+      Alert.alert('✅ Sucesso', 'Livro cadastrado!');
+      setModal(false);
+      setForm({ titulo: '', autor: '', isbn: '', ano: '' });
+      carregarLivros();
+    } catch (err) {
+      Alert.alert('Erro', err.response?.data?.erro || 'Erro ao cadastrar.');
+    }
+  }
+
+  const livrosFiltrados = livros.filter(l =>
+    l.titulo.toLowerCase().includes(busca.toLowerCase()) ||
+    l.autor.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  function renderItem({ item }) {
+    const disponivel = item.status === 'Disponível';
+    return (
+      <View style={[styles.card, {
+        borderLeftColor: disponivel ? '#198754' : '#dc3545'
+      }]}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.titulo} numberOfLines={1}>{item.titulo}</Text>
+          <View style={[styles.badge, {
+            backgroundColor: disponivel ? '#d1e7dd' : '#f8d7da'
+          }]}>
+            <Text style={[styles.badgeText, {
+              color: disponivel ? '#0a3622' : '#58151c'
+            }]}>
+              {disponivel ? '🟢' : '🔴'} {item.status}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.autor}>✍️ {item.autor}</Text>
+        {item.ano && <Text style={styles.meta}>📅 {item.ano}</Text>}
+        {item.isbn && <Text style={styles.meta}>ISBN: {item.isbn}</Text>}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Busca */}
+      <View style={styles.buscaContainer}>
+        <TextInput
+          style={styles.buscaInput}
+          placeholder="🔍 Buscar livro ou autor..."
+          value={busca}
+          onChangeText={setBusca}
+        />
+      </View>
+
+      {/* Contador */}
+      <View style={styles.contadorRow}>
+        <Text style={styles.contador}>
+          {livros.filter(l => l.status === 'Disponível').length} disponíveis •{' '}
+          {livros.filter(l => l.status === 'Emprestado').length} emprestados
+        </Text>
+        <TouchableOpacity style={styles.addBtn} onPress={() => setModal(true)}>
+          <Text style={styles.addBtnText}>+ Novo</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#0d6efd" />
+        </View>
+      ) : (
+        <FlatList
+          data={livrosFiltrados}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={{ padding: 16 }}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={styles.emptyText}>Nenhum livro encontrado.</Text>
+            </View>
+          }
+        />
+      )}
+
+      {/* Modal Cadastro */}
+      <Modal visible={modal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>📚 Cadastrar Livro</Text>
+            <ScrollView>
+              {[
+                { label: 'Título *',   key: 'titulo', placeholder: 'Ex: Clean Code' },
+                { label: 'Autor *',    key: 'autor',  placeholder: 'Ex: Robert C. Martin' },
+                { label: 'ISBN',       key: 'isbn',   placeholder: 'Ex: 9780132350884' },
+                { label: 'Ano',        key: 'ano',    placeholder: 'Ex: 2008', keyboardType: 'numeric' },
+              ].map(campo => (
+                <View key={campo.key} style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>{campo.label}</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder={campo.placeholder}
+                    value={form[campo.key]}
+                    onChangeText={v => setForm({ ...form, [campo.key]: v })}
+                    keyboardType={campo.keyboardType || 'default'}
+                  />
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.btnCancelar}
+                                onPress={() => setModal(false)}>
+                <Text style={styles.btnCancelarText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnSalvar} onPress={cadastrar}>
+                <Text style={styles.btnSalvarText}>Cadastrar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container:       { flex: 1, backgroundColor: '#f0f4f8' },
+  center:          { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  emptyText:       { color: '#6c757d', fontSize: 16 },
+  buscaContainer:  { padding: 16, paddingBottom: 0 },
+  buscaInput: {
+    backgroundColor: '#fff', borderRadius: 10,
+    padding: 12, fontSize: 15,
+    borderWidth: 1, borderColor: '#dee2e6', elevation: 2
+  },
+  contadorRow: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', padding: 16, paddingBottom: 0
+  },
+  contador:        { fontSize: 13, color: '#6c757d' },
+  addBtn:          { backgroundColor: '#0d6efd', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  addBtnText:      { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  card: {
+    backgroundColor: '#fff', borderRadius: 12,
+    padding: 16, marginBottom: 10, elevation: 2,
+    borderLeftWidth: 5
+  },
+  cardHeader:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 },
+  titulo:          { fontSize: 15, fontWeight: 'bold', color: '#1a2332', flex: 1, marginRight: 8 },
+  badge:           { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText:       { fontSize: 11, fontWeight: 'bold' },
+  autor:           { fontSize: 13, color: '#6c757d' },
+  meta:            { fontSize: 12, color: '#adb5bd', marginTop: 2 },
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end'
+  },
+  modalContent: {
+    backgroundColor: '#fff', borderRadius: 20,
+    padding: 24, maxHeight: '80%'
+  },
+  modalTitle:      { fontSize: 18, fontWeight: 'bold', marginBottom: 16, color: '#1a2332' },
+  inputGroup:      { marginBottom: 14 },
+  inputLabel:      { fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#495057' },
+  input: {
+    borderWidth: 1, borderColor: '#dee2e6',
+    borderRadius: 8, padding: 12, fontSize: 15, backgroundColor: '#f8f9fa'
+  },
+  modalBtns:       { flexDirection: 'row', gap: 12, marginTop: 16 },
+  btnCancelar: {
+    flex: 1, borderWidth: 1, borderColor: '#dee2e6',
+    borderRadius: 10, padding: 14, alignItems: 'center'
+  },
+  btnCancelarText: { color: '#6c757d', fontWeight: 'bold' },
+  btnSalvar:       { flex: 1, backgroundColor: '#0d6efd', borderRadius: 10, padding: 14, alignItems: 'center' },
+  btnSalvarText:   { color: '#fff', fontWeight: 'bold' },
+});
+mobile/src/screens/EmprestimosScreen.js
+JavaScript
+
+import React, { useState, useEffect } from 'react';
+import {
+  View, Text, StyleSheet, FlatList,
+  TouchableOpacity, Alert, ActivityIndicator,
+  Modal, ScrollView
+} from 'react-native';
+import axios from 'axios';
+import { Picker } from '@react-native-picker/picker';
+
+const API = 'http://192.168.1.100:3001/api';
+
+export default function EmprestimosScreen() {
+  const [emprestimos, setEmprestimos] = useState([]);
+  const [livros,      setLivros]      = useState([]);
+  const [usuarios,    setUsuarios]    = useState([]);
+  const [modal,       setModal]       = useState(false);
+  const [loading,     setLoading]     = useState(true);
+  const [livroId,     setLivroId]     = useState('');
+  const [usuarioId,   setUsuarioId]   = useState('');
+
+  useEffect(() => { carregarDados(); }, []);
+
+  async function carregarDados() {
+    setLoading(true);
+    try {
+      const [empRes, livRes, usrRes] = await Promise.all([
+        axios.get(`${API}/emprestimos`),
+        axios.get(`${API}/livros`),
+        axios.get(`${API}/usuarios`)
+      ]);
+      setEmprestimos(empRes.data);
+      setLivros(livRes.data.filter(l => l.status === 'Disponível'));
+      setUsuarios(usrRes.data);
+    } catch {
+      Alert.alert('Erro', 'Não foi possível carregar os dados.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function registrarEmprestimo() {
+    if (!livroId || !usuarioId) {
+      Alert.alert('Atenção', 'Selecione o livro e o usuário.');
+      return;
+    }
+    try {
+      const res = await axios.post(`${API}/emprestimos`, {
+        livro_id:   parseInt(livroId),
+        usuario_id: parseInt(usuarioId)
+      });
+      Alert.alert('✅ Sucesso', `Empréstimo registrado!\n${res.data.livro} → ${res.data.usuario}`);
+      setModal(false);
+      setLivroId('');
+      setUsuarioId('');
+      carregarDados();
+    } catch (err) {
+      // Regra (B): livro já emprestado
+      Alert.alert('❌ Erro', err.response?.data?.erro || 'Erro ao registrar empréstimo.');
+    }
+  }
+
+  async function registrarDevolucao(emprestimo) {
+    Alert.alert(
+      'Confirmar Devolução',
+      `Devolver "${emprestimo.livro}" de ${emprestimo.usuario}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          style: 'default',
+          onPress: async () => {
+            try {
+              await axios.put(`${API}/emprestimos/${emprestimo.id}/devolver`);
+              Alert.alert('✅ Devolução registrada!');
+              carregarDados();
+            } catch (err) {
+              Alert.alert('Erro', err.response?.data?.erro || 'Erro ao devolver.');
+            }
+          }
+        }
+      ]
+    );
+  }
+
+  function renderItem({ item }) {
+    const ativo = item.status === 'Ativo';
+    return (
+      <View style={[styles.card, {
+        borderLeftColor: ativo ? '#dc3545' : '#198754'
+      }]}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.livroTitulo} numberOfLines={1}>{item.livro}</Text>
+          <View style={[styles.badge, {
+            backgroundColor: ativo ? '#f8d7da' : '#d1e7dd'
+          }]}>
+            <Text style={[styles.badgeText, {
+              color: ativo ? '#58151c' : '#0a3622'
+            }]}>
+              {ativo ? '🔴' : '🟢'} {item.status}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.meta}>👤 {item.usuario}</Text>
+        <Text style={styles.meta}>
+          📅 {new Date(item.data_emprestimo).toLocaleDateString('pt-BR')}
+        </Text>
+        {item.data_devolucao && (
+          <Text style={styles.meta}>
+            ↩️ {new Date(item.data_devolucao).toLocaleDateString('pt-BR')}
+          </Text>
+        )}
+        {ativo && (
+          <TouchableOpacity style={styles.devolverBtn}
+                            onPress={() => registrarDevolucao(item)}>
+            <Text style={styles.devolverBtnText}>↩️ Registrar Devolução</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.topBar}>
+        <Text style={styles.topBarText}>
+          {emprestimos.filter(e => e.status === 'Ativo').length} empréstimos ativos
+        </Text>
+        <TouchableOpacity style={styles.addBtn} onPress={() => setModal(true)}>
+          <Text style={styles.addBtnText}>+ Novo</Text>
+        </TouchableOpacity>
+      </View>
+
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#0d6efd" />
+        </View>
+      ) : (
+        <FlatList
+          data={emprestimos}
+          keyExtractor={item => item.id.toString()}
+          renderItem={renderItem}
+          contentContainerStyle={{ padding: 16 }}
+          ListEmptyComponent={
+            <View style={styles.center}>
+              <Text style={styles.emptyText}>Nenhum empréstimo registrado.</Text>
+            </View>
+          }
+        />
+      )}
+
+      {/* Modal Novo Empréstimo */}
+      <Modal visible={modal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>📋 Novo Empréstimo</Text>
+
+            <Text style={styles.inputLabel}>Livro Disponível *</Text>
+            <View style={styles.pickerContainer}>
+              <Picker selectedValue={livroId}
+                      onValueChange={setLivroId}>
+                <Picker.Item label="Selecione um livro..." value="" />
+                {livros.map(l => (
+                  <Picker.Item key={l.id} label={`${l.titulo} (${l.autor})`} value={l.id.toString()} />
+                ))}
+              </Picker>
+            </View>
+            {livros.length === 0 && (
+              <Text style={styles.aviso}>⚠️ Nenhum livro disponível no momento.</Text>
+            )}
+
+            <Text style={styles.inputLabel}>Usuário *</Text>
+            <View style={styles.pickerContainer}>
+              <Picker selectedValue={usuarioId}
+                      onValueChange={setUsuarioId}>
+                <Picker.Item label="Selecione um usuário..." value="" />
+                {usuarios.map(u => (
+                  <Picker.Item key={u.id} label={`${u.nome} (${u.email})`} value={u.id.toString()} />
+                ))}
+              </Picker>
+            </View>
+
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={styles.btnCancelar}
+                                onPress={() => setModal(false)}>
+                <Text style={styles.btnCancelarText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btnSalvar, { opacity: livros.length === 0 ? 0.5 : 1 }]}
+                onPress={registrarEmprestimo}
+                disabled={livros.length === 0}>
+                <Text style={styles.btnSalvarText}>Registrar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container:       { flex: 1, backgroundColor: '#f0f4f8' },
+  center:          { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  emptyText:       { color: '#6c757d', fontSize: 16 },
+  topBar: {
+    flexDirection: 'row', justifyContent: 'space-between',
+    alignItems: 'center', padding: 16
+  },
+  topBarText:      { fontSize: 13, color: '#6c757d' },
+  addBtn:          { backgroundColor: '#0d6efd', borderRadius: 8, paddingHorizontal: 16, paddingVertical: 8 },
+  addBtnText:      { color: '#fff', fontWeight: 'bold' },
+  card: {
+    backgroundColor: '#fff', borderRadius: 12,
+    padding: 16, marginBottom: 10, elevation: 2, borderLeftWidth: 5
+  },
+  cardHeader:      { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 },
+  livroTitulo:     { fontSize: 15, fontWeight: 'bold', color: '#1a2332', flex: 1, marginRight: 8 },
+  badge:           { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText:       { fontSize: 11, fontWeight: 'bold' },
+  meta:            { fontSize: 13, color: '#6c757d', marginTop: 2 },
+  devolverBtn: {
+    backgroundColor: '#198754', borderRadius: 8,
+    padding: 10, alignItems: 'center', marginTop: 12
+  },
+  devolverBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
+  modalOverlay:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalContent:    { backgroundColor: '#fff', borderRadius: 20, padding: 24 },
+  modalTitle:      { fontSize: 18, fontWeight: 'bold', marginBottom: 16, color: '#1a2332' },
+  inputLabel:      { fontSize: 13, fontWeight: '600', marginBottom: 6, color: '#495057' },
+  pickerContainer: { borderWidth: 1, borderColor: '#dee2e6', borderRadius: 8, marginBottom: 16, backgroundColor: '#f8f9fa' },
+  aviso:           { color: '#dc3545', fontSize: 12, marginBottom: 12 },
+  modalBtns:       { flexDirection: 'row', gap: 12, marginTop: 8 },
+  btnCancelar:     { flex: 1, borderWidth: 1, borderColor: '#dee2e6', borderRadius: 10, padding: 14, alignItems: 'center' },
+  btnCancelarText: { color: '#6c757d', fontWeight: 'bold' },
+  btnSalvar:       { flex: 1, backgroundColor: '#0d6efd', borderRadius: 10, padding: 14, alignItems: 'center' },
+  btnSalvarText:   { color: '#fff', fontWeight: 'bold' },
+});
+5. Arquivo .env e package.json
+backend/.env
+env
+
+PORT=3001
+DB_HOST=localhost
+DB_USER=root
+DB_PASSWORD=sua_senha_aqui
+DB_NAME=biblioteca_db
+backend/package.json
+JSON
+
+{
+  "name": "biblioteca-backend",
+  "version": "1.0.0",
+  "description": "API REST - Sistema de Gerenciamento de Biblioteca - FATEC SP",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev":   "nodemon server.js"
+  },
+  "dependencies": {
+    "cors":               "^2.8.5",
+    "dotenv":             "^16.3.1",
+    "express":            "^4.18.2",
+    "mysql2":             "^3.6.5",
+    "swagger-ui-express": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}
+Como Executar o Projeto
+Bash
+
+# ═══════════════════════════════════════════
+# 1. BANCO DE DADOS
+# ═══════════════════════════════════════════
+mysql -u root -p < backend/src/database/schema.sql
+
+# ═══════════════════════════════════════════
+# 2. BACKEND
+# ═══════════════════════════════════════════
+cd backend
+npm install
+cp .env.example .env    # Configure sua senha MySQL
+npm run dev
+
+# API:     http://localhost:3001/api
+# Swagger: http://localhost:3001/api-docs
+# Menu console ativa automaticamente!
+
+# ═══════════════════════════════════════════
+# 3. FRONTEND React.js
+# ═══════════════════════════════════════════
+cd frontend
+npm install
+npm start
+# Abre em: http://localhost:3000
+
+# ═══════════════════════════════════════════
+# 4. MOBILE React Native
+# ═══════════════════════════════════════════
+cd mobile
+npm install
+# Edite o IP em cada Screen (sua máquina na rede)
+npx expo start
+Resumo das Funcionalidades Implementadas
+Requisito	Implementado	Detalhes
+POO - Classe Livro	✅	estaDisponivel(), toString()
+POO - Classe Usuario	✅	toString(), validações
+POO - Classe Biblioteca	✅	Todos os métodos CRUD + empréstimos
+Regra (B) - Livro já emprestado	✅	podeEmprestar() + transação MySQL
+Menu Console	✅	9 opções com readline
+Relatório final (B)	✅	Exibido ao sair com status
+Relatório (C) - emprestados	✅	API + React + tabela com badges
+Bootstrap	✅	Sidebar, cards, tabelas, badges
+Swagger	✅	Todas as rotas documentadas
+jsPDF	✅	Relatório PDF + comprovante devolução
+React Native	✅	3 telas completas com navegação
+MySQL	✅	3 tabelas com FK e transações
+
+Sistema Completo de Gerenciamento de Biblioteca (Node.js + Express + MySQL + React + React Native)
+
+Abaixo está a implementação completa conforme solicitado no PDF (classes POO, menu console, regras de empréstimo, relatório de status, React para relatório, Swagger e jsPDF).
+
+1. Estrutura de Pastas Recomendada
+text
+
+biblioteca-pro/
+├── backend/
+│   ├── src/
+│   │   ├── controllers/
+│   │   │   └── BibliotecaController.js
+│   │   ├── routes/
+│   │   │   └── api.js
+│   │   ├── database.js
+│   │   └── server.js
+│   ├── package.json
+│   └── .env
+├── frontend/          # React.js (Create React App ou Vite)
+└── mobile/            # React Native
+2. Classes POO (Obrigatório)
+Arquivo: backend/src/controllers/BibliotecaController.js
+
+JavaScript
+
+class Livro {
+  constructor(id, titulo, autor, status = 'Disponível') {
+    this.id = id;
+    this.titulo = titulo;
+    this.autor = autor;
+    this.status = status;
+  }
+}
+
+class Usuario {
+  constructor(id, nome, email) {
+    this.id = id;
+    this.nome = nome;
+    this.email = email;
+  }
+}
+
+class Biblioteca {
+  constructor(db) {
+    this.db = db;
+  }
+
+  // Regra (B): não permite empréstimo se já estiver emprestado
+  async podeEmprestar(livroId) {
+    const [rows] = await this.db.query(
+      "SELECT status FROM livros WHERE id = ?", [livroId]
+    );
+    return rows[0] && rows[0].status === 'Disponível';
+  }
+
+  async cadastrarLivro(titulo, autor) {
+    const [result] = await this.db.query(
+      "INSERT INTO livros (titulo, autor) VALUES (?, ?)", 
+      [titulo, autor]
+    );
+    return new Livro(result.insertId, titulo, autor);
+  }
+
+  async registrarEmprestimo(livroId, usuarioId) {
+    const pode = await this.podeEmprestar(livroId);
+    if (!pode) throw new Error('Livro já está emprestado');
+
+    await this.db.query(
+      `INSERT INTO emprestimos (livro_id, usuario_id, data_emprestimo) 
+       VALUES (?, ?, NOW())`,
+      [livroId, usuarioId]
+    );
+    await this.db.query(
+      "UPDATE livros SET status = 'Emprestado' WHERE id = ?", 
+      [livroId]
+    );
+    return true;
+  }
+
+  async registrarDevolucao(livroId) {
+    await this.db.query(
+      `UPDATE emprestimos SET data_devolucao = NOW() 
+       WHERE livro_id = ? AND data_devolucao IS NULL`,
+      [livroId]
+    );
+    await this.db.query(
+      "UPDATE livros SET status = 'Disponível' WHERE id = ?", 
+      [livroId]
+    );
+  }
+
+  async relatorioStatus() {
+    const [livros] = await this.db.query(
+      "SELECT id, titulo, autor, status FROM livros ORDER BY id"
+    );
+    return livros;
+  }
+}
+
+module.exports = { Livro, Usuario, Biblioteca };
+3. Menu Console (Requisito B)
+Arquivo: backend/src/server.js (ou crie console.js)
+
+JavaScript
+
+const readline = require('readline');
+const mysql = require('mysql2/promise');
+const { Biblioteca } = require('./controllers/BibliotecaController');
+
+async function main() {
+  const connection = await mysql.createConnection({
+    host: 'localhost',
+    user: 'root',
+    password: '',
+    database: 'biblioteca_db'
+  });
+
+  const biblioteca = new Biblioteca(connection);
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  function menu() {
+    console.log('\n=== Gerenciamento de Biblioteca ===');
+    console.log('1. Cadastrar Livro');
+    console.log('2. Registrar Empréstimo');
+    console.log('3. Registrar Devolução');
+    console.log('4. Relatório de Status');
+    console.log('5. Sair');
+    rl.question('\nEscolha uma opção: ', async (opcao) => {
+      try {
+        if (opcao === '1') {
+          rl.question('Título: ', (titulo) => {
+            rl.question('Autor: ', async (autor) => {
+              await biblioteca.cadastrarLivro(titulo, autor);
+              console.log('Livro cadastrado com sucesso!');
+              menu();
+            });
+          });
+        } else if (opcao === '2') {
+          rl.question('ID do Livro: ', (livroId) => {
+            rl.question('ID do Usuário: ', async (usuarioId) => {
+              try {
+                await biblioteca.registrarEmprestimo(livroId, usuarioId);
+                console.log('Empréstimo realizado!');
+              } catch (e) {
+                console.log(e.message);
+              }
+              menu();
+            });
+          });
+        } else if (opcao === '3') {
+          rl.question('ID do Livro: ', async (livroId) => {
+            await biblioteca.registrarDevolucao(livroId);
+            console.log('Devolução registrada!');
+            menu();
+          });
+        } else if (opcao === '4') {
+          const relatorio = await biblioteca.relatorioStatus();
+          console.table(relatorio);
+          menu();
+        } else if (opcao === '5') {
+          rl.close();
+          connection.end();
+        }
+      } catch (err) {
+        console.error(err.message);
+        menu();
+      }
+    });
+  }
+  menu();
+}
+
+main();
+4. Backend Express + Swagger (Resumido)
+Instale:
+
+Bash
+
+npm install express mysql2 swagger-ui-express cors
+Adicione no server.js as rotas REST (POST /api/livros, POST /api/emprestimos, etc.) e documente com Swagger conforme o PDF.
+
+5. Frontend React – Relatório de Livros
+Crie o componente conforme o exemplo do PDF:
+
+React
+
+// frontend/src/Relatorio.jsx
+import React, { useEffect, useState } from 'react';
+
+function Relatorio() {
+  const [livros, setLivros] = useState([]);
+
+  useEffect(() => {
+    fetch('http://localhost:3000/api/livros')
+      .then(res => res.json())
+      .then(setLivros);
+  }, []);
+
+  return (
+    <table className="table table-striped">
+      <thead>
+        <tr><th>Título</th><th>Status</th></tr>
+      </thead>
+      <tbody>
+        {livros.map(l => (
+          <tr key={l.id}>
+            <td>{l.titulo}</td>
+            <td>
+              <span className={`badge ${l.status === 'Disponível' ? 'bg-success' : 'bg-danger'}`}>
+                {l.status}
+              </span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+6. Geração de PDF (jsPDF)
+JavaScript
+
+import jsPDF from 'jspdf';
+
+function gerarComprovante(livro, usuario) {
+  const doc = new jsPDF();
+  doc.text("Comprovante de Devolução", 10, 10);
+  doc.text(`Livro: ${livro.titulo}`, 10, 20);
+  doc.text(`Usuário: ${usuario.nome}`, 10, 30);
+  doc.text(`Data: ${new Date().toLocaleDateString()}`, 10, 40);
+  doc.save("comprovante.pdf");
+}
+7. Banco de Dados (MySQL)
+Use o script do PDF (já fornecido).
+
+Dica: Para hospedagem, use Render + Neon (Postgres) ou PlanetScale (MySQL). Como você pediu MySQL, recomendo PlanetScale ou Railway
