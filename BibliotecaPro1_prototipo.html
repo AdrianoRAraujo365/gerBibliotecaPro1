@@ -1,0 +1,1732 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BibliotecaPro | FATEC SP – Zona Leste</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style>
+    /* ═══════════════════════════════════════════════
+       VARIÁVEIS GLOBAIS
+    ═══════════════════════════════════════════════ */
+    :root {
+      --primary:      #0d6efd;
+      --primary-dk:   #0a58ca;
+      --success:      #198754;
+      --danger:       #dc3545;
+      --warning:      #ffc107;
+      --dark:         #1a2332;
+      --sidebar-w:    260px;
+      --sidebar-sm:   72px;
+      --topbar-h:     64px;
+      --bg:           #f0f4f8;
+      --card:         #ffffff;
+      --border:       #e9ecef;
+      --muted:        #6c757d;
+      --radius:       12px;
+      --radius-sm:    8px;
+      --shadow:       0 2px 16px rgba(0,0,0,.08);
+      --transition:   all .25s ease;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: #2d3748;
+      overflow-x: hidden;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e0; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+    /* ═══════════════════════════════════════════════
+       SIDEBAR
+    ═══════════════════════════════════════════════ */
+    .sidebar {
+      position: fixed; top: 0; left: 0;
+      width: var(--sidebar-w);
+      height: 100vh;
+      background: var(--dark);
+      display: flex; flex-direction: column;
+      z-index: 1100;
+      transition: var(--transition);
+      overflow: hidden;
+    }
+    .sidebar.collapsed { width: var(--sidebar-sm); }
+
+    /* Brand */
+    .sb-brand {
+      display: flex; align-items: center; gap: 12px;
+      padding: 18px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      min-height: var(--topbar-h);
+      white-space: nowrap;
+    }
+    .sb-brand-icon {
+      flex-shrink: 0;
+      width: 38px; height: 38px;
+      background: linear-gradient(135deg, #0d6efd, #6610f2);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 1.1rem;
+    }
+    .sb-brand-text { overflow: hidden; }
+    .sb-brand-text strong { display: block; color: #fff; font-size: 1.05rem; font-weight: 700; }
+    .sb-brand-text small  { color: #94a3b8; font-size: .68rem; }
+
+    /* Nav */
+    .sb-nav { padding: 12px 10px; flex: 1; overflow-y: auto; overflow-x: hidden; }
+    .sb-label {
+      color: #475569; font-size: .64rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .08em;
+      padding: 10px 10px 4px; white-space: nowrap; overflow: hidden;
+    }
+    .sb-link {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 12px; color: #94a3b8;
+      text-decoration: none; border-radius: var(--radius-sm);
+      margin-bottom: 2px; font-size: .9rem;
+      transition: var(--transition); white-space: nowrap; overflow: hidden;
+      cursor: pointer;
+    }
+    .sb-link i { font-size: 1.1rem; flex-shrink: 0; width: 20px; text-align: center; }
+    .sb-link:hover { background: rgba(255,255,255,.07); color: #fff; }
+    .sb-link.active { background: var(--primary); color: #fff; font-weight: 600; }
+
+    /* Badge on link */
+    .sb-badge {
+      margin-left: auto; background: #dc3545;
+      color: #fff; font-size: .65rem; font-weight: 700;
+      padding: 2px 7px; border-radius: 20px; flex-shrink: 0;
+    }
+
+    .sb-footer {
+      padding: 14px 16px;
+      border-top: 1px solid rgba(255,255,255,.08);
+      font-size: .72rem; color: #475569; white-space: nowrap; overflow: hidden;
+    }
+    .sb-footer .name { font-weight: 600; color: #64748b; }
+
+    /* ═══════════════════════════════════════════════
+       MAIN WRAPPER
+    ═══════════════════════════════════════════════ */
+    .main-wrapper {
+      margin-left: var(--sidebar-w);
+      min-height: 100vh;
+      transition: var(--transition);
+    }
+    .main-wrapper.expanded { margin-left: var(--sidebar-sm); }
+
+    /* ═══════════════════════════════════════════════
+       TOPBAR
+    ═══════════════════════════════════════════════ */
+    .topbar {
+      position: sticky; top: 0; z-index: 1000;
+      height: var(--topbar-h);
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 24px; gap: 14px;
+      box-shadow: 0 1px 10px rgba(0,0,0,.05);
+    }
+    .topbar-title { font-weight: 700; font-size: 1.05rem; color: var(--dark); }
+    .topbar-sub   { font-size: .76rem; color: var(--muted); }
+
+    /* Avatar */
+    .avatar {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, #0d6efd, #6610f2);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-weight: 700; font-size: .9rem;
+    }
+
+    /* ═══════════════════════════════════════════════
+       CONTENT
+    ═══════════════════════════════════════════════ */
+    .content { padding: 24px; }
+
+    /* ═══════════════════════════════════════════════
+       CARDS GERAIS
+    ═══════════════════════════════════════════════ */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border) !important;
+      border-radius: var(--radius) !important;
+      box-shadow: var(--shadow);
+    }
+    .card-hdr {
+      background: transparent !important;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 20px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    /* ═══════════════════════════════════════════════
+       STAT CARDS
+    ═══════════════════════════════════════════════ */
+    .stat-card {
+      border: none !important; border-radius: var(--radius) !important;
+      overflow: hidden; position: relative;
+      transition: var(--transition); color: #fff; cursor: default;
+    }
+    .stat-card:hover { transform: translateY(-4px); box-shadow: 0 10px 28px rgba(0,0,0,.18) !important; }
+    .stat-icon {
+      width: 50px; height: 50px;
+      background: rgba(255,255,255,.2); border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.4rem;
+    }
+    .stat-num   { font-size: 2.2rem; font-weight: 800; line-height: 1; }
+    .stat-label { font-size: .78rem; opacity: .88; }
+    .stat-chip  {
+      font-size: .72rem; display: inline-block;
+      background: rgba(255,255,255,.2);
+      border-radius: 20px; padding: 2px 10px; margin-top: 6px;
+    }
+
+    /* ═══════════════════════════════════════════════
+       STATUS PILLS
+    ═══════════════════════════════════════════════ */
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 4px 12px; border-radius: 20px; font-size: .76rem; font-weight: 600;
+    }
+    .pill::before { content: ''; width: 7px; height: 7px; border-radius: 50%; }
+    .pill-disp   { background: #d1fae5; color: #065f46; }
+    .pill-disp::before { background: #10b981; }
+    .pill-emp    { background: #fee2e2; color: #991b1b; }
+    .pill-emp::before  { background: #ef4444; }
+    .pill-atras  { background: #fef3c7; color: #92400e; }
+    .pill-atras::before{ background: #f59e0b; }
+
+    /* ═══════════════════════════════════════════════
+       TABLES
+    ═══════════════════════════════════════════════ */
+    .table th {
+      font-size: .74rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); background: #f8fafc;
+      border-bottom: 1px solid var(--border) !important;
+      padding: 12px 16px !important;
+    }
+    .table td {
+      padding: 13px 16px !important;
+      vertical-align: middle;
+      border-bottom: 1px solid #f1f5f9 !important;
+      font-size: .88rem;
+    }
+    .table tbody tr:hover { background: #f8faff; }
+    .table tbody tr:last-child td { border-bottom: none !important; }
+
+    /* ═══════════════════════════════════════════════
+       FORMS
+    ═══════════════════════════════════════════════ */
+    .form-control, .form-select {
+      border-radius: var(--radius-sm) !important;
+      border-color: var(--border) !important;
+      font-size: .88rem; padding: 10px 13px;
+    }
+    .form-control:focus, .form-select:focus {
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 0 3px rgba(13,110,253,.12) !important;
+    }
+    .form-label { font-weight: 600; font-size: .83rem; color: #374151; margin-bottom: 5px; }
+
+    /* ═══════════════════════════════════════════════
+       BUTTONS
+    ═══════════════════════════════════════════════ */
+    .btn { border-radius: var(--radius-sm) !important; font-weight: 500; font-size: .875rem; }
+
+    /* ═══════════════════════════════════════════════
+       MODAL
+    ═══════════════════════════════════════════════ */
+    .modal-content { border-radius: var(--radius) !important; border: none !important; box-shadow: 0 20px 60px rgba(0,0,0,.2) !important; }
+    .modal-header  { padding: 20px 24px !important; border-bottom: 1px solid var(--border) !important; }
+    .modal-body    { padding: 24px !important; }
+    .modal-footer  { padding: 16px 24px !important; border-top: 1px solid var(--border) !important; }
+
+    /* ═══════════════════════════════════════════════
+       ALERT TOAST (custom)
+    ═══════════════════════════════════════════════ */
+    #toast-box {
+      position: fixed; bottom: 24px; right: 24px;
+      z-index: 9999; display: flex; flex-direction: column; gap: 10px;
+    }
+    .toast-item {
+      display: flex; align-items: center; gap: 10px;
+      background: #1a2332; color: #fff;
+      padding: 14px 18px; border-radius: 12px; min-width: 280px;
+      font-size: .875rem; box-shadow: 0 6px 24px rgba(0,0,0,.3);
+      animation: slideIn .3s ease;
+    }
+    .toast-item.success { border-left: 4px solid #10b981; }
+    .toast-item.danger  { border-left: 4px solid #ef4444; }
+    .toast-item.warning { border-left: 4px solid #f59e0b; }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(40px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ═══════════════════════════════════════════════
+       PROGRESS BAR
+    ═══════════════════════════════════════════════ */
+    .prog { height: 10px; border-radius: 6px; background: #e9ecef; overflow: hidden; }
+    .prog-bar { height: 100%; border-radius: 6px; background: var(--success); transition: width .6s ease; }
+
+    /* ═══════════════════════════════════════════════
+       SEARCH INPUT
+    ═══════════════════════════════════════════════ */
+    .search-wrap { position: relative; }
+    .search-wrap i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+    .search-input  { padding-left: 36px !important; }
+
+    /* ═══════════════════════════════════════════════
+       MOBILE OVERLAY
+    ═══════════════════════════════════════════════ */
+    .mob-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.5); z-index: 1050;
+    }
+    .mob-overlay.show { display: block; }
+
+    /* EMPTY STATE */
+    .empty-state { padding: 48px 0; text-align: center; color: var(--muted); }
+    .empty-state i { font-size: 3rem; opacity: .35; }
+
+    /* PULSE DOT */
+    .pulse-dot {
+      width: 10px; height: 10px; border-radius: 50%; background: #ef4444;
+      box-shadow: 0 0 0 3px rgba(239,68,68,.3);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { box-shadow: 0 0 0 3px rgba(239,68,68,.3); }
+      50%      { box-shadow: 0 0 0 7px rgba(239,68,68,.1); }
+    }
+
+    /* ═══════════════════════════════════════════════
+       RESPONSIVE
+    ═══════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      .sidebar {
+        transform: translateX(-100%);
+        width: var(--sidebar-w) !important;
+      }
+      .sidebar.mobile-open { transform: translateX(0); }
+      .main-wrapper { margin-left: 0 !important; }
+      .content { padding: 16px; }
+      .stat-num { font-size: 1.8rem !important; }
+      .hide-sm { display: none !important; }
+    }
+
+    /* FADE IN */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp .4s ease forwards; }
+
+    /* SECTION PAGES */
+    .page { display: none; }
+    .page.active { display: block; }
+  </style>
+</head>
+
+
+<body>
+
+<!-- Mobile overlay -->
+<div class="mob-overlay" id="mobOverlay" onclick="closeSidebar()"></div>
+
+<!-- ═══════════════════════════════════ SIDEBAR ═══════════════════════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-brand">
+    <div class="sb-brand-icon"><i class="bi bi-book-half"></i></div>
+    <div class="sb-brand-text">
+      <strong>BibliotecaPro</strong>
+      <small>FATEC SP · Zona Leste</small>
+    </div>
+  </div>
+
+  <nav class="sb-nav">
+    <div class="sb-label">Menu Principal</div>
+
+    <a class="sb-link active" onclick="showPage('dashboard',this)">
+      <i class="bi bi-speedometer2"></i><span>Dashboard</span>
+    </a>
+    <a class="sb-link" onclick="showPage('livros',this)">
+      <i class="bi bi-book-half"></i><span>Livros</span>
+      <span class="sb-badge" id="badge-livros">8</span>
+    </a>
+    <a class="sb-link" onclick="showPage('usuarios',this)">
+      <i class="bi bi-people-fill"></i><span>Usuários</span>
+    </a>
+    <a class="sb-link" onclick="showPage('emprestimos',this)">
+      <i class="bi bi-arrow-left-right"></i><span>Empréstimos</span>
+      <span class="sb-badge" id="badge-emp">2</span>
+    </a>
+    <a class="sb-link" onclick="showPage('relatorio',this)">
+      <i class="bi bi-bar-chart-fill"></i><span>Relatório</span>
+    </a>
+
+    <div class="sb-label mt-2">Sistema</div>
+    <a class="sb-link" onclick="showPage('swagger',this)">
+      <i class="bi bi-code-slash"></i><span>API / Swagger</span>
+    </a>
+  </nav>
+
+  <div class="sb-footer">
+    <div class="name">DSM · WEB3 · 2025</div>
+    <div>Adriano R. de Araujo</div>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════════ MAIN ═══════════════════════════════════ -->
+<div class="main-wrapper" id="mainWrapper">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <!-- Desktop toggle -->
+    <button class="btn btn-sm btn-outline-secondary d-none d-md-flex" onclick="toggleSidebar()" style="padding:6px 10px">
+      <i class="bi bi-layout-sidebar-inset" id="toggleIcon"></i>
+    </button>
+    <!-- Mobile toggle -->
+    <button class="btn btn-sm btn-outline-secondary d-md-none" onclick="openSidebar()" style="padding:6px 10px">
+      <i class="bi bi-list"></i>
+    </button>
+
+    <div class="ms-2">
+      <div class="topbar-title" id="pageTitle">Dashboard</div>
+      <div class="topbar-sub"  id="pageSub">Visão geral do sistema</div>
+    </div>
+
+    <div class="ms-auto d-flex align-items-center gap-3">
+      <span class="badge bg-success-subtle text-success fw-semibold" style="font-size:.76rem">
+        <i class="bi bi-circle-fill me-1" style="font-size:.45rem"></i>Sistema Online
+      </span>
+      <div class="d-none d-sm-flex align-items-center gap-2">
+        <div class="avatar">A</div>
+        <div class="hide-sm">
+          <div style="font-size:.82rem;font-weight:600;line-height:1.2">Admin</div>
+          <div style="font-size:.72rem;color:var(--muted)">Bibliotecário</div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ─────────────── CONTENT AREA ─────────────── -->
+  <main class="content fade-up">
+
+    <!-- ══════════════════════════ PAGE: DASHBOARD ══════════════════════════ -->
+    <div class="page active" id="page-dashboard">
+
+      <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+        <div>
+          <h5 class="fw-bold mb-1">Visão Geral do Sistema</h5>
+          <p class="text-muted small mb-0"><i class="bi bi-clock me-1"></i>Atualizado agora</p>
+        </div>
+        <button class="btn btn-outline-primary btn-sm" onclick="refreshDash()">
+          <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+        </button>
+      </div>
+
+      <!-- STAT CARDS -->
+      <div class="row g-3 mb-4" id="statCards">
+        <!-- Gerado por JS -->
+      </div>
+
+      <!-- PROGRESS BAR DISPONIBILIDADE -->
+      <div class="card mb-4">
+        <div class="card-body py-3">
+          <div class="d-flex justify-content-between mb-1">
+            <small class="fw-semibold">Taxa de Disponibilidade do Acervo</small>
+            <small class="fw-bold text-primary" id="percDisp">75%</small>
+          </div>
+          <div class="prog"><div class="prog-bar" id="progBar" style="width:75%"></div></div>
+          <div class="d-flex justify-content-between mt-1">
+            <small class="text-success">6 disponíveis</small>
+            <small class="text-danger">2 emprestados</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- LIVROS EMPRESTADOS AGORA -->
+      <div class="card">
+        <div class="card-hdr d-flex justify-content-between align-items-center">
+          <div class="d-flex align-items-center gap-2">
+            <div class="pulse-dot"></div>
+            <span class="fw-bold">Livros Emprestados Agora</span>
+          </div>
+          <span class="badge rounded-pill" style="background:#fee2e2;color:#991b1b;font-size:.76rem">
+            2 em aberto
+          </span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table mb-0">
+              <thead>
+                <tr>
+                  <th>Livro</th><th>Autor</th><th>Leitor</th>
+                  <th>Empréstimo</th><th>Previsão</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="tbDash"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════ PAGE: LIVROS ══════════════════════════ -->
+    <div class="page" id="page-livros">
+
+      <!-- Alerta -->
+      <div id="alertLivros" class="d-none alert d-flex align-items-center gap-2 mb-4"></div>
+
+      <!-- Toolbar -->
+      <div class="card mb-4">
+        <div class="card-body py-3">
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-4">
+              <label class="form-label">Buscar</label>
+              <div class="search-wrap">
+                <i class="bi bi-search"></i>
+                <input class="form-control search-input" id="buscaLivro" placeholder="Título, autor ou ISBN..." oninput="filtrarLivros()">
+              </div>
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label">Status</label>
+              <select class="form-select" id="filtroStatusLivro" onchange="filtrarLivros()">
+                <option value="todos">Todos</option>
+                <option value="Disponível">Disponível</option>
+                <option value="Emprestado">Emprestado</option>
+              </select>
+            </div>
+            <div class="col-6 col-md-2">
+              <label class="form-label">Gênero</label>
+              <select class="form-select" id="filtroGenero" onchange="filtrarLivros()">
+                <option value="">Todos</option>
+                <option value="Tecnologia">Tecnologia</option>
+                <option value="Literatura">Literatura</option>
+              </select>
+            </div>
+            <div class="col-12 col-md-4 d-flex gap-2 justify-content-md-end">
+              <button class="btn btn-outline-secondary btn-sm" onclick="filtrarLivros()">
+                <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="abrirModalLivro()">
+                <i class="bi bi-plus-lg me-1"></i>Novo Livro
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contadores -->
+      <div class="d-flex gap-3 mb-3 flex-wrap" id="contLivros"></div>
+
+      <!-- Tabela -->
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th>#</th><th>Título / Autor</th><th>ISBN</th>
+                <th>Ano</th><th>Gênero</th><th>Editora</th>
+                <th>Status</th><th style="width:100px">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbLivros"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════ PAGE: USUÁRIOS ══════════════════════════ -->
+    <div class="page" id="page-usuarios">
+      <div id="alertUsuarios" class="d-none alert d-flex align-items-center gap-2 mb-4"></div>
+
+      <div class="card mb-4">
+        <div class="card-body py-3">
+          <div class="row g-3 align-items-end">
+            <div class="col-12 col-md-6">
+              <label class="form-label">Buscar Usuário</label>
+              <div class="search-wrap">
+                <i class="bi bi-search"></i>
+                <input class="form-control search-input" id="buscaUser" placeholder="Nome, email ou matrícula..." oninput="filtrarUsuarios()">
+              </div>
+            </div>
+            <div class="col-12 col-md-6 d-flex gap-2 justify-content-md-end">
+              <button class="btn btn-outline-secondary btn-sm" onclick="filtrarUsuarios()">
+                <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="abrirModalUsuario()">
+                <i class="bi bi-person-plus-fill me-1"></i>Novo Usuário
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-muted small mb-3" id="contUsers"></p>
+
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th>Usuário</th><th>Email</th><th>Telefone</th>
+                <th>Matrícula</th><th>Cadastro</th><th style="width:100px">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tbUsuarios"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════ PAGE: EMPRÉSTIMOS ══════════════════════════ -->
+    <div class="page" id="page-emprestimos">
+      <div id="alertEmp" class="d-none alert d-flex align-items-center gap-2 mb-4"></div>
+
+      <!-- Mini stats -->
+      <div class="row g-3 mb-4" id="miniStatsEmp"></div>
+
+      <!-- Toolbar -->
+      <div class="card mb-4">
+        <div class="card-body py-3">
+          <div class="d-flex gap-3 align-items-center flex-wrap">
+            <div class="btn-group btn-group-sm" id="filtroEmpGrp">
+              <button class="btn btn-primary" onclick="filtroEmp('todos',this)">Todos</button>
+              <button class="btn btn-outline-secondary" onclick="filtroEmp('Ativo',this)">Ativos</button>
+              <button class="btn btn-outline-secondary" onclick="filtroEmp('Devolvido',this)">Devolvidos</button>
+            </div>
+            <div class="ms-auto d-flex gap-2">
+              <button class="btn btn-outline-secondary btn-sm" onclick="renderEmprestimos()">
+                <i class="bi bi-arrow-clockwise me-1"></i>Atualizar
+              </button>
+              <button class="btn btn-primary btn-sm" onclick="abrirModalEmp()">
+                <i class="bi bi-plus-lg me-1"></i>Novo Empréstimo
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th>#</th><th>Livro</th><th>Leitor</th>
+                <th>Empréstimo</th><th>Previsão</th><th>Devolução</th>
+                <th>Status</th><th>Ação</th>
+              </tr>
+            </thead>
+            <tbody id="tbEmp"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════ PAGE: RELATÓRIO ══════════════════════════ -->
+    <div class="page" id="page-relatorio">
+
+      <!-- Cards resumo -->
+      <div class="row g-3 mb-4" id="relCards"></div>
+
+      <!-- Barra disponibilidade -->
+      <div class="card mb-4">
+        <div class="card-body py-3">
+          <div class="d-flex justify-content-between mb-1">
+            <small class="fw-semibold">Taxa de Disponibilidade</small>
+            <small class="fw-bold text-primary" id="relPerc">75%</small>
+          </div>
+          <div class="prog"><div class="prog-bar" id="relProgBar" style="width:75%"></div></div>
+          <div class="d-flex justify-content-between mt-1">
+            <small class="text-success" id="relDispText">6 disponíveis</small>
+            <small class="text-danger"  id="relEmpText">2 emprestados</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toolbar relatório -->
+      <div class="card mb-4">
+        <div class="card-body py-3">
+          <div class="d-flex gap-2 align-items-center flex-wrap">
+            <span class="text-muted small"><i class="bi bi-clock me-1"></i>Dados em tempo real</span>
+            <div class="ms-auto d-flex gap-2 flex-wrap">
+              <div class="btn-group btn-group-sm">
+                <button class="btn btn-dark" onclick="filtroRel('todos',this)">Todos</button>
+                <button class="btn btn-outline-secondary" onclick="filtroRel('disp',this)">✅ Disponíveis</button>
+                <button class="btn btn-outline-secondary" onclick="filtroRel('emp',this)">🔴 Emprestados</button>
+                <button class="btn btn-outline-secondary" onclick="filtroRel('atras',this)">⚠️ Atrasados</button>
+              </div>
+              <button class="btn btn-sm btn-danger fw-semibold" onclick="gerarPDF()">
+                <i class="bi bi-file-earmark-pdf-fill me-1"></i>Exportar PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela status acervo -->
+      <div class="card">
+        <div class="card-hdr d-flex justify-content-between">
+          <span class="fw-bold">Status do Acervo</span>
+          <span class="text-muted small" id="relCount">8 registros</span>
+        </div>
+        <div class="table-responsive">
+          <table class="table mb-0">
+            <thead>
+              <tr>
+                <th>#</th><th>Título</th><th>Autor</th><th>Gênero</th>
+                <th>Ano</th><th>Status</th><th>Usuário</th>
+                <th>Empréstimo</th><th>Previsão</th><th>PDF</th>
+              </tr>
+            </thead>
+            <tbody id="tbRel"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════ PAGE: SWAGGER ══════════════════════════ -->
+    <div class="page" id="page-swagger">
+      <div class="card">
+        <div class="card-hdr" style="background:linear-gradient(135deg,#0d6efd,#6610f2) !important; border-radius:var(--radius) var(--radius) 0 0;">
+          <h5 class="fw-bold text-white mb-0"><i class="bi bi-code-slash me-2"></i>BibliotecaPro API — Swagger / OpenAPI 3.0</h5>
+          <small class="text-white opacity-75">Documentação interativa da API REST · FATEC SP Zona Leste · DSM · WEB3</small>
+        </div>
+        <div class="card-body">
+          <div class="alert alert-info d-flex align-items-center gap-2 mb-4">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>No projeto real, acesse <strong><a href="/api-docs" target="_blank">http://localhost:3001/api-docs</a></strong> para a interface Swagger interativa.</span>
+          </div>
+
+          <!-- Endpoints agrupados -->
+          <div id="swaggerEndpoints"></div>
+        </div>
+      </div>
+    </div>
+
+  </main><!-- /content -->
+</div><!-- /main-wrapper -->
+
+<!-- ════════════════════ TOAST BOX ════════════════════ -->
+<div id="toast-box"></div>
+
+<!-- ════════════════════ MODAL: LIVRO ════════════════════ -->
+<div class="modal fade" id="modalLivro" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="modalLivroTitle">
+          <i class="bi bi-plus-circle-fill me-2 text-primary"></i>Cadastrar Novo Livro
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-8">
+            <label class="form-label">Título *</label>
+            <input class="form-control" id="ml-titulo" placeholder="Ex: Clean Code">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Ano</label>
+            <input class="form-control" id="ml-ano" type="number" placeholder="2024" min="1000" max="2099">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Autor *</label>
+            <input class="form-control" id="ml-autor" placeholder="Ex: Robert C. Martin">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">ISBN</label>
+            <input class="form-control font-monospace" id="ml-isbn" placeholder="9780132350884">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Gênero</label>
+            <input class="form-control" id="ml-genero" placeholder="Tecnologia, Literatura...">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Editora</label>
+            <input class="form-control" id="ml-editora" placeholder="Ex: Prentice Hall">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarLivro()">
+          <i class="bi bi-check-lg me-1"></i><span id="btnLivroTxt">Cadastrar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ MODAL: USUÁRIO ════════════════════ -->
+<div class="modal fade" id="modalUsuario" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold" id="modalUserTitle">
+          <i class="bi bi-person-plus-fill me-2 text-primary"></i>Novo Usuário
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Nome Completo *</label>
+            <input class="form-control" id="mu-nome" placeholder="Ex: Ana Silva">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Email *</label>
+            <input type="email" class="form-control" id="mu-email" placeholder="usuario@fatec.sp.gov.br">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Telefone</label>
+            <input class="form-control" id="mu-tel" placeholder="11999990001">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Matrícula</label>
+            <input class="form-control" id="mu-mat" placeholder="DSM2024001">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" onclick="salvarUsuario()">
+          <i class="bi bi-check-lg me-1"></i><span id="btnUserTxt">Cadastrar</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════ MODAL: EMPRÉSTIMO ════════════════════ -->
+<div class="modal fade" id="modalEmp" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">
+          <i class="bi bi-arrow-left-right me-2 text-primary"></i>Registrar Empréstimo
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info py-2 mb-3 small d-flex align-items-center gap-2">
+          <i class="bi bi-info-circle-fill"></i>
+          <span>Somente livros <strong>Disponíveis</strong> podem ser emprestados.</span>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Livro Disponível *</label>
+          <select class="form-select" id="emp-livro">
+            <option value="">Selecione um livro...</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Usuário *</label>
+          <select class="form-select" id="emp-usuario">
+            <option value="">Selecione um usuário...</option>
+          </select>
+        </div>
+        <div>
+          <label class="form-label">Observação</label>
+          <textarea class="form-control" id="emp-obs" rows="2" placeholder="Observações opcionais..."></textarea>
+        </div>
+        <div class="alert alert-light mt-3 py-2 small">
+          <i class="bi bi-calendar-check me-2"></i>
+          <strong>Prazo padrão:</strong> 14 dias após a data do empréstimo.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmarEmprestimo()">
+          <i class="bi bi-check-lg me-1"></i>Confirmar Empréstimo
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   DADOS DO PROTÓTIPO (mock data baseado no schema PostgreSQL)
+═══════════════════════════════════════════════════════════════ */
+let livros = [
+  { id:1, titulo:'Clean Code',                autor:'Robert C. Martin',  isbn:'9780132350884', ano:2008, genero:'Tecnologia', editora:'Prentice Hall',  status:'Disponível' },
+  { id:2, titulo:'The Pragmatic Programmer',  autor:'Andrew Hunt',        isbn:'9780201616224', ano:1999, genero:'Tecnologia', editora:'Addison-Wesley', status:'Disponível' },
+  { id:3, titulo:'Design Patterns',           autor:'Gang of Four',       isbn:'9780201633610', ano:1994, genero:'Tecnologia', editora:'Addison-Wesley', status:'Emprestado' },
+  { id:4, titulo:'JavaScript: The Good Parts',autor:'Douglas Crockford',  isbn:'9780596517748', ano:2008, genero:'Tecnologia', editora:"O'Reilly",       status:'Disponível' },
+  { id:5, titulo:'Dom Casmurro',              autor:'Machado de Assis',   isbn:'9788525406958', ano:1899, genero:'Literatura', editora:'Ática',           status:'Disponível' },
+  { id:6, titulo:'O Alquimista',              autor:'Paulo Coelho',       isbn:'9788532511010', ano:1988, genero:'Literatura', editora:'HarperCollins',   status:'Emprestado' },
+  { id:7, titulo:'Node.js Design Patterns',   autor:'Mario Casciaro',     isbn:'9781839214110', ano:2020, genero:'Tecnologia', editora:'Packt',           status:'Disponível' },
+  { id:8, titulo:'React na Prática',          autor:'Ederson Corbari',    isbn:'9788575228289', ano:2022, genero:'Tecnologia', editora:'Alta Books',      status:'Disponível' },
+];
+
+let usuarios = [
+  { id:1, nome:'Ana Silva',   email:'ana@fatec.sp.gov.br',   telefone:'11999990001', matricula:'DSM2024001', criado_em:'2024-03-01' },
+  { id:2, nome:'Bruno Costa', email:'bruno@fatec.sp.gov.br', telefone:'11999990002', matricula:'DSM2024002', criado_em:'2024-03-02' },
+  { id:3, nome:'Carla Dias',  email:'carla@fatec.sp.gov.br', telefone:'11999990003', matricula:'DSM2024003', criado_em:'2024-03-03' },
+  { id:4, nome:'Diego Rocha', email:'diego@fatec.sp.gov.br', telefone:'11999990004', matricula:'DSM2024004', criado_em:'2024-03-04' },
+];
+
+let emprestimos = [
+  { id:1, livro_id:3, usuario_id:1, data_emprestimo:'2025-04-20', data_prevista:'2025-05-04', data_devolucao:null, status:'Ativo',     observacao:'' },
+  { id:2, livro_id:6, usuario_id:2, data_emprestimo:'2025-04-15', data_prevista:'2025-04-29', data_devolucao:null, status:'Ativo',     observacao:'Urgente' },
+  { id:3, livro_id:4, usuario_id:3, data_emprestimo:'2025-03-10', data_prevista:'2025-03-24', data_devolucao:'2025-03-22', status:'Devolvido', observacao:'' },
+];
+
+let nextLivroId = 9;
+let nextUserId  = 5;
+let nextEmpId   = 4;
+let editingLivroId = null;
+let editingUserId  = null;
+let filtroEmpAtual = 'todos';
+let filtroRelAtual = 'todos';
+
+/* ═══════════════════════════════════════════════════════════════
+   HELPERS
+═══════════════════════════════════════════════════════════════ */
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('pt-BR');
+}
+function hoje() { return new Date().toISOString().split('T')[0]; }
+function addDays(d, n) {
+  const dt = new Date(d);
+  dt.setDate(dt.getDate() + n);
+  return dt.toISOString().split('T')[0];
+}
+function isAtrasado(emp) {
+  return emp.status === 'Ativo' && new Date() > new Date(emp.data_prevista);
+}
+
+function getLivro(id)   { return livros.find(l => l.id === id); }
+function getUsuario(id) { return usuarios.find(u => u.id === id); }
+
+/* Avatar color */
+const CORES = ['#6366f1','#8b5cf6','#ec4899','#0ea5e9','#10b981','#f59e0b','#ef4444'];
+function avatarColor(nome) {
+  let h = 0; for (let c of nome) h += c.charCodeAt(0);
+  return CORES[h % CORES.length];
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOAST
+═══════════════════════════════════════════════════════════════ */
+function toast(msg, tipo='success') {
+  const icons = { success:'check-circle-fill', danger:'x-circle-fill', warning:'exclamation-triangle-fill' };
+  const box = document.getElementById('toast-box');
+  const el = document.createElement('div');
+  el.className = `toast-item ${tipo}`;
+  el.innerHTML = `<i class="bi bi-${icons[tipo]}"></i><span>${msg}</span>`;
+  box.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; el.style.transform='translateX(40px)'; el.style.transition='.3s'; setTimeout(()=>el.remove(),300); }, 3500);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR / NAVIGATION
+═══════════════════════════════════════════════════════════════ */
+let sidebarCollapsed = false;
+
+function toggleSidebar() {
+  sidebarCollapsed = !sidebarCollapsed;
+  document.getElementById('sidebar').classList.toggle('collapsed', sidebarCollapsed);
+  document.getElementById('mainWrapper').classList.toggle('expanded', sidebarCollapsed);
+  document.getElementById('toggleIcon').className = sidebarCollapsed ? 'bi bi-layout-sidebar' : 'bi bi-layout-sidebar-inset';
+}
+function openSidebar()  {
+  document.getElementById('sidebar').classList.add('mobile-open');
+  document.getElementById('mobOverlay').classList.add('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('mobOverlay').classList.remove('show');
+}
+
+const PAGE_TITLES = {
+  dashboard:   ['Dashboard', 'Visão geral do sistema'],
+  livros:      ['Acervo de Livros', 'Gerencie o catálogo completo'],
+  usuarios:    ['Usuários', 'Cadastro de leitores'],
+  emprestimos: ['Empréstimos', 'Controle de empréstimos e devoluções'],
+  relatorio:   ['Relatório', 'Status e exportação de dados'],
+  swagger:     ['API / Swagger', 'Documentação OpenAPI 3.0'],
+};
+
+function showPage(name, linkEl) {
+  // Hide all
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.sb-link').forEach(l => l.classList.remove('active'));
+
+  // Show
+  document.getElementById('page-' + name).classList.add('active');
+  if (linkEl) linkEl.classList.add('active');
+
+  // Update topbar
+  const [t, s] = PAGE_TITLES[name] || ['BibliotecaPro', ''];
+  document.getElementById('pageTitle').textContent = t;
+  document.getElementById('pageSub').textContent   = s;
+
+  // Close mobile sidebar
+  closeSidebar();
+
+  // Render page
+  if (name === 'dashboard')   renderDashboard();
+  if (name === 'livros')      renderLivros();
+  if (name === 'usuarios')    renderUsuarios();
+  if (name === 'emprestimos') renderEmprestimos();
+  if (name === 'relatorio')   renderRelatorio();
+  if (name === 'swagger')     renderSwagger();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   DASHBOARD
+═══════════════════════════════════════════════════════════════ */
+function calcStats() {
+  const total    = livros.length;
+  const disp     = livros.filter(l => l.status === 'Disponível').length;
+  const emp      = livros.filter(l => l.status === 'Emprestado').length;
+  const ativos   = emprestimos.filter(e => e.status === 'Ativo').length;
+  const devolvidos = emprestimos.filter(e => e.status === 'Devolvido').length;
+  const atrasados  = emprestimos.filter(e => isAtrasado(e)).length;
+  const perc = total ? Math.round((disp/total)*100) : 0;
+  return { total, disp, emp, ativos, devolvidos, atrasados, perc };
+}
+
+function renderDashboard() {
+  const s = calcStats();
+
+  // Stat cards
+  const CARDS = [
+    { label:'Total de Livros',     val:s.total,      icon:'book-half',                bg:'linear-gradient(135deg,#0d6efd,#6610f2)', chip:'Acervo completo' },
+    { label:'Disponíveis',         val:s.disp,       icon:'check-circle-fill',        bg:'linear-gradient(135deg,#198754,#20c997)', chip:'Prontos para empréstimo' },
+    { label:'Emprestados',         val:s.emp,        icon:'arrow-left-right',         bg:'linear-gradient(135deg,#dc3545,#fd7e14)', chip:'Em circulação' },
+    { label:'Usuários Ativos',     val:usuarios.length, icon:'people-fill',           bg:'linear-gradient(135deg,#0dcaf0,#0d6efd)', chip:'Leitores cadastrados' },
+    { label:'Empréstimos Ativos',  val:s.ativos,     icon:'clock-history',            bg:'linear-gradient(135deg,#6610f2,#d63384)', chip:'Ativos agora' },
+    { label:'Devolvidos',          val:s.devolvidos, icon:'check2-all',               bg:'linear-gradient(135deg,#20c997,#198754)', chip:'Total histórico' },
+    { label:'Atrasados',           val:s.atrasados,  icon:'exclamation-triangle-fill',bg:'linear-gradient(135deg,#ffc107,#fd7e14)', chip:'Requer atenção' },
+  ];
+
+  document.getElementById('statCards').innerHTML = CARDS.map(c => `
+    <div class="col-6 col-sm-4 col-xl-3">
+      <div class="card stat-card h-100" style="background:${c.bg}">
+        <div class="card-body p-3">
+          <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+              <div class="stat-label">${c.label}</div>
+              <div class="stat-num mt-1">${c.val}</div>
+            </div>
+            <div class="stat-icon"><i class="bi bi-${c.icon}"></i></div>
+          </div>
+          <div class="stat-chip">${c.chip}</div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Progress bar
+  document.getElementById('percDisp').textContent = s.perc + '%';
+  document.getElementById('progBar').style.width  = s.perc + '%';
+
+  // Table emprestados agora
+  const ativos = emprestimos.filter(e => e.status === 'Ativo');
+  const tbDash = document.getElementById('tbDash');
+  if (!ativos.length) {
+    tbDash.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-success fw-semibold">
+      <i class="bi bi-check-circle-fill me-2"></i>Todos os livros disponíveis!</td></tr>`;
+    return;
+  }
+  tbDash.innerHTML = ativos.map(e => {
+    const l = getLivro(e.livro_id), u = getUsuario(e.usuario_id);
+    const atr = isAtrasado(e);
+    return `<tr style="${atr?'background:#fffbeb':''}">
+      <td><div class="fw-semibold">${l?.titulo||'—'}</div></td>
+      <td><small class="text-muted">${l?.autor||'—'}</small></td>
+      <td>
+        <div class="d-flex align-items-center gap-2">
+          <div style="width:30px;height:30px;border-radius:8px;background:#ede9fe;display:flex;align-items:center;justify-content:center;color:#7c3aed;font-weight:700;font-size:.8rem">${u?.nome?.charAt(0)||'?'}</div>
+          <div>
+            <div style="font-size:.85rem;font-weight:600">${u?.nome||'—'}</div>
+            <div style="font-size:.73rem;color:var(--muted)">${u?.email||''}</div>
+          </div>
+        </div>
+      </td>
+      <td><small>${fmtDate(e.data_emprestimo)}</small></td>
+      <td><small class="${atr?'text-danger fw-bold':''}">${fmtDate(e.data_prevista)}</small></td>
+      <td>${atr ? '<span class="pill pill-atras">⚠️ Atrasado</span>' : '<span class="pill pill-emp">Emprestado</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  // Update badges
+  document.getElementById('badge-emp').textContent   = ativos.length;
+  document.getElementById('badge-livros').textContent = livros.length;
+}
+
+function refreshDash() {
+  renderDashboard();
+  toast('Dashboard atualizado!', 'success');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LIVROS
+═══════════════════════════════════════════════════════════════ */
+function filtrarLivros() { renderLivros(); }
+
+function renderLivros() {
+  const busca  = (document.getElementById('buscaLivro')?.value||'').toLowerCase();
+  const stFilt = document.getElementById('filtroStatusLivro')?.value || 'todos';
+  const geFilt = document.getElementById('filtroGenero')?.value || '';
+
+  let lista = livros.filter(l => {
+    const matchB = !busca || l.titulo.toLowerCase().includes(busca) || l.autor.toLowerCase().includes(busca) || (l.isbn||'').includes(busca);
+    const matchS = stFilt === 'todos' || l.status === stFilt;
+    const matchG = !geFilt || l.genero === geFilt;
+    return matchB && matchS && matchG;
+  });
+
+  const disp = lista.filter(l => l.status === 'Disponível').length;
+  const emp  = lista.filter(l => l.status === 'Emprestado').length;
+
+  document.getElementById('contLivros').innerHTML = `
+    <span class="text-muted small"><strong>${lista.length}</strong> livros encontrados</span>
+    <span class="text-success small"><i class="bi bi-circle-fill me-1" style="font-size:.45rem"></i><strong>${disp}</strong> disponíveis</span>
+    <span class="text-danger small"><i class="bi bi-circle-fill me-1" style="font-size:.45rem"></i><strong>${emp}</strong> emprestados</span>
+  `;
+
+  const tb = document.getElementById('tbLivros');
+  if (!lista.length) {
+    tb.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-search d-block mb-2" style="font-size:2rem"></i>Nenhum livro encontrado.</td></tr>`;
+    return;
+  }
+
+  tb.innerHTML = lista.map(l => `
+    <tr>
+      <td><span class="text-muted small">${l.id}</span></td>
+      <td>
+        <div class="fw-semibold">${l.titulo}</div>
+        <div class="text-muted small">✍️ ${l.autor}</div>
+      </td>
+      <td><small class="text-muted font-monospace">${l.isbn||'—'}</small></td>
+      <td>${l.ano||'—'}</td>
+      <td>${l.genero ? `<span class="badge rounded-pill" style="background:#ede9fe;color:#5b21b6;font-weight:600">${l.genero}</span>` : ''}</td>
+      <td><small>${l.editora||'—'}</small></td>
+      <td><span class="pill ${l.status==='Disponível'?'pill-disp':'pill-emp'}">${l.status}</span></td>
+      <td>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border-radius:7px" onclick="editarLivro(${l.id})" title="Editar">
+            <i class="bi bi-pencil-fill"></i>
+          </button>
+          <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border-radius:7px;${l.status==='Emprestado'?'opacity:.4':''}"
+            onclick="${l.status!=='Emprestado'?`deletarLivro(${l.id})`:'void(0)'}"
+            ${l.status==='Emprestado'?'disabled title="Livro emprestado"':''}>
+            <i class="bi bi-trash-fill"></i>
+          </button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalLivro(id=null) {
+  editingLivroId = id;
+  const fields = ['titulo','autor','isbn','ano','genero','editora'];
+  if (id) {
+    const l = getLivro(id);
+    fields.forEach(f => document.getElementById('ml-'+f).value = l[f]||'');
+    document.getElementById('modalLivroTitle').innerHTML = '<i class="bi bi-pencil-fill me-2 text-primary"></i>Editar Livro';
+    document.getElementById('btnLivroTxt').textContent = 'Salvar';
+  } else {
+    fields.forEach(f => document.getElementById('ml-'+f).value = '');
+    document.getElementById('modalLivroTitle').innerHTML = '<i class="bi bi-plus-circle-fill me-2 text-primary"></i>Cadastrar Novo Livro';
+    document.getElementById('btnLivroTxt').textContent = 'Cadastrar';
+  }
+  new bootstrap.Modal(document.getElementById('modalLivro')).show();
+}
+
+function editarLivro(id) { abrirModalLivro(id); }
+
+function salvarLivro() {
+  const titulo  = document.getElementById('ml-titulo').value.trim();
+  const autor   = document.getElementById('ml-autor').value.trim();
+  if (!titulo || !autor) { toast('Título e autor são obrigatórios!', 'danger'); return; }
+
+  const dados = {
+    titulo, autor,
+    isbn:    document.getElementById('ml-isbn').value.trim()||null,
+    ano:     parseInt(document.getElementById('ml-ano').value)||null,
+    genero:  document.getElementById('ml-genero').value.trim()||null,
+    editora: document.getElementById('ml-editora').value.trim()||null,
+  };
+
+  if (editingLivroId) {
+    const idx = livros.findIndex(l => l.id === editingLivroId);
+    livros[idx] = { ...livros[idx], ...dados };
+    toast('Livro atualizado com sucesso!', 'success');
+  } else {
+    livros.push({ id: nextLivroId++, status:'Disponível', ...dados });
+    toast('Livro cadastrado com sucesso!', 'success');
+  }
+
+  bootstrap.Modal.getInstance(document.getElementById('modalLivro')).hide();
+  renderLivros();
+  document.getElementById('badge-livros').textContent = livros.length;
+}
+
+function deletarLivro(id) {
+  const l = getLivro(id);
+  if (!confirm(`Remover o livro "${l.titulo}"?`)) return;
+  livros = livros.filter(x => x.id !== id);
+  renderLivros();
+  toast('Livro removido.', 'warning');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   USUÁRIOS
+═══════════════════════════════════════════════════════════════ */
+function filtrarUsuarios() { renderUsuarios(); }
+
+function renderUsuarios() {
+  const busca = (document.getElementById('buscaUser')?.value||'').toLowerCase();
+  let lista = usuarios.filter(u => !busca ||
+    u.nome.toLowerCase().includes(busca) ||
+    u.email.toLowerCase().includes(busca) ||
+    (u.matricula||'').toLowerCase().includes(busca)
+  );
+
+  document.getElementById('contUsers').innerHTML = `<strong>${lista.length}</strong> usuários cadastrados`;
+
+  const tb = document.getElementById('tbUsuarios');
+  if (!lista.length) {
+    tb.innerHTML = `<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-people d-block mb-2" style="font-size:2rem"></i>Nenhum usuário encontrado.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = lista.map(u => `
+    <tr>
+      <td>
+        <div class="d-flex align-items-center gap-2">
+          <div style="width:36px;height:36px;border-radius:10px;background:${avatarColor(u.nome)};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;flex-shrink:0">${u.nome.charAt(0).toUpperCase()}</div>
+          <div>
+            <div class="fw-semibold" style="font-size:.9rem">${u.nome}</div>
+            <div class="text-muted" style="font-size:.75rem">ID: #${u.id}</div>
+          </div>
+        </div>
+      </td>
+      <td><small>${u.email}</small></td>
+      <td><small>${u.telefone||'—'}</small></td>
+      <td>${u.matricula?`<span class="badge rounded-pill" style="background:#f0fdf4;color:#166534;font-weight:600">${u.matricula}</span>`:'<span class="text-muted">—</span>'}</td>
+      <td><small>${fmtDate(u.criado_em)}</small></td>
+      <td>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm" style="background:#eff6ff;color:#1d4ed8;border-radius:7px" onclick="editarUsuario(${u.id})"><i class="bi bi-pencil-fill"></i></button>
+          <button class="btn btn-sm" style="background:#fef2f2;color:#dc2626;border-radius:7px" onclick="deletarUsuario(${u.id})"><i class="bi bi-trash-fill"></i></button>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function abrirModalUsuario(id=null) {
+  editingUserId = id;
+  if (id) {
+    const u = getUsuario(id);
+    document.getElementById('mu-nome').value  = u.nome;
+    document.getElementById('mu-email').value = u.email;
+    document.getElementById('mu-tel').value   = u.telefone||'';
+    document.getElementById('mu-mat').value   = u.matricula||'';
+    document.getElementById('modalUserTitle').innerHTML  = '<i class="bi bi-person-gear me-2 text-primary"></i>Editar Usuário';
+    document.getElementById('btnUserTxt').textContent    = 'Salvar';
+  } else {
+    ['mu-nome','mu-email','mu-tel','mu-mat'].forEach(id => document.getElementById(id).value='');
+    document.getElementById('modalUserTitle').innerHTML = '<i class="bi bi-person-plus-fill me-2 text-primary"></i>Novo Usuário';
+    document.getElementById('btnUserTxt').textContent   = 'Cadastrar';
+  }
+  new bootstrap.Modal(document.getElementById('modalUsuario')).show();
+}
+
+function editarUsuario(id) { abrirModalUsuario(id); }
+
+function salvarUsuario() {
+  const nome  = document.getElementById('mu-nome').value.trim();
+  const email = document.getElementById('mu-email').value.trim();
+  if (!nome || !email) { toast('Nome e email são obrigatórios!', 'danger'); return; }
+
+  const dados = { nome, email, telefone: document.getElementById('mu-tel').value.trim()||null, matricula: document.getElementById('mu-mat').value.trim()||null };
+
+  if (editingUserId) {
+    const idx = usuarios.findIndex(u => u.id === editingUserId);
+    usuarios[idx] = { ...usuarios[idx], ...dados };
+    toast('Usuário atualizado!', 'success');
+  } else {
+    usuarios.push({ id: nextUserId++, criado_em: hoje(), ...dados });
+    toast('Usuário cadastrado!', 'success');
+  }
+
+  bootstrap.Modal.getInstance(document.getElementById('modalUsuario')).hide();
+  renderUsuarios();
+}
+
+function deletarUsuario(id) {
+  const u = getUsuario(id);
+  if (!confirm(`Remover "${u.nome}"?`)) return;
+  usuarios = usuarios.filter(x => x.id !== id);
+  renderUsuarios();
+  toast('Usuário removido.', 'warning');
+}
+</script>
+
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   EMPRÉSTIMOS
+═══════════════════════════════════════════════════════════════ */
+function filtroEmp(val, btn) {
+  filtroEmpAtual = val;
+  document.querySelectorAll('#filtroEmpGrp .btn').forEach(b => {
+    b.className = 'btn btn-outline-secondary btn-sm';
+  });
+  btn.className = 'btn btn-primary btn-sm';
+  renderEmprestimos();
+}
+
+function renderEmprestimos() {
+  let lista = emprestimos;
+  if (filtroEmpAtual !== 'todos') lista = lista.filter(e => e.status === filtroEmpAtual);
+
+  const ativos    = emprestimos.filter(e => e.status === 'Ativo').length;
+  const devolvidos = emprestimos.filter(e => e.status === 'Devolvido').length;
+  const atrasados  = emprestimos.filter(e => isAtrasado(e)).length;
+  const disponLivros = livros.filter(l => l.status === 'Disponível').length;
+
+  // Mini stats
+  document.getElementById('miniStatsEmp').innerHTML = [
+    { l:'Ativos',      v:ativos,        c:'#fee2e2', t:'#991b1b', i:'clock-history' },
+    { l:'Devolvidos',  v:devolvidos,    c:'#d1fae5', t:'#065f46', i:'check2-all' },
+    { l:'Atrasados',   v:atrasados,     c:'#fef3c7', t:'#92400e', i:'exclamation-triangle-fill' },
+    { l:'Disponíveis', v:disponLivros,  c:'#dbeafe', t:'#1e40af', i:'book-half' },
+  ].map(s => `
+    <div class="col-6 col-md-3">
+      <div class="card h-100" style="border:1px solid ${s.c}">
+        <div class="card-body d-flex align-items-center gap-3 py-3">
+          <div style="width:44px;height:44px;border-radius:12px;background:${s.c};display:flex;align-items:center;justify-content:center">
+            <i class="bi bi-${s.i}" style="color:${s.t};font-size:1.2rem"></i>
+          </div>
+          <div>
+            <div style="font-size:1.5rem;font-weight:800;color:${s.t};line-height:1">${s.v}</div>
+            <div style="font-size:.75rem;color:var(--muted)">${s.l}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  const tb = document.getElementById('tbEmp');
+  if (!lista.length) {
+    tb.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted"><i class="bi bi-inbox d-block mb-2" style="font-size:2rem"></i>Nenhum empréstimo encontrado.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = lista.map(e => {
+    const l = getLivro(e.livro_id), u = getUsuario(e.usuario_id);
+    const atr = isAtrasado(e);
+    return `
+    <tr style="${atr?'background:#fffbeb':''}">
+      <td><small class="text-muted">${e.id}</small></td>
+      <td>
+        <div class="fw-semibold" style="font-size:.9rem">${l?.titulo||'—'}</div>
+        <div class="text-muted" style="font-size:.75rem">${l?.autor||''}</div>
+      </td>
+      <td>
+        <div style="font-size:.9rem;font-weight:500">${u?.nome||'—'}</div>
+        <div class="text-muted" style="font-size:.75rem">${u?.matricula||u?.email||''}</div>
+      </td>
+      <td><small>${fmtDate(e.data_emprestimo)}</small></td>
+      <td><small class="${atr?'text-danger fw-bold':''}">${fmtDate(e.data_prevista)}${atr?' ⚠️':''}</small></td>
+      <td><small class="text-muted">${fmtDate(e.data_devolucao)}</small></td>
+      <td>${atr ? '<span class="pill pill-atras">Atrasado</span>' :
+           e.status==='Ativo' ? '<span class="pill pill-emp">Ativo</span>' :
+           '<span class="pill pill-disp">Devolvido</span>'}</td>
+      <td>${e.status==='Ativo' ? `
+        <button class="btn btn-sm fw-semibold" style="background:#d1fae5;color:#065f46;border-radius:8px;font-size:.8rem" onclick="devolver(${e.id})">
+          <i class="bi bi-arrow-return-left me-1"></i>Devolver
+        </button>` : '—'}
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function abrirModalEmp() {
+  // Popula selects
+  const selLivro = document.getElementById('emp-livro');
+  const selUser  = document.getElementById('emp-usuario');
+  const dispLivros = livros.filter(l => l.status === 'Disponível');
+
+  selLivro.innerHTML = '<option value="">Selecione um livro...</option>' +
+    dispLivros.map(l => `<option value="${l.id}"> ${l.titulo} — ${l.autor}</option>`).join('');
+  selUser.innerHTML  = '<option value="">Selecione um usuário...</option>' +
+    usuarios.map(u => `<option value="${u.id}"> ${u.nome} (${u.email})</option>`).join('');
+
+  document.getElementById('emp-obs').value = '';
+  new bootstrap.Modal(document.getElementById('modalEmp')).show();
+}
+
+function confirmarEmprestimo() {
+  const livroId   = parseInt(document.getElementById('emp-livro').value);
+  const usuarioId = parseInt(document.getElementById('emp-usuario').value);
+  if (!livroId || !usuarioId) { toast('Selecione o livro e o usuário!', 'warning'); return; }
+
+  const l = getLivro(livroId);
+  // Regra de negócio: não pode emprestar se já estiver emprestado
+  if (l.status === 'Emprestado') {
+    toast(`"${l.titulo}" já está emprestado!`, 'danger');
+    return;
+  }
+
+  // Registra empréstimo
+  l.status = 'Emprestado';
+  const hj = hoje();
+  emprestimos.push({
+    id: nextEmpId++,
+    livro_id: livroId, usuario_id: usuarioId,
+    data_emprestimo: hj,
+    data_prevista:   addDays(hj, 14),
+    data_devolucao:  null,
+    status: 'Ativo',
+    observacao: document.getElementById('emp-obs').value.trim()
+  });
+
+  bootstrap.Modal.getInstance(document.getElementById('modalEmp')).hide();
+  renderEmprestimos();
+
+  const u = getUsuario(usuarioId);
+  toast(`Empréstimo registrado! "${l.titulo}" → ${u.nome}`, 'success');
+  document.getElementById('badge-emp').textContent = emprestimos.filter(e=>e.status==='Ativo').length;
+}
+
+function devolver(empId) {
+  const e = emprestimos.find(x => x.id === empId);
+  const l = getLivro(e.livro_id);
+  if (!confirm(`Confirmar devolução de "${l.titulo}"?`)) return;
+
+  e.status = 'Devolvido';
+  e.data_devolucao = hoje();
+  l.status = 'Disponível';
+
+  const atr = new Date(hoje()) > new Date(e.data_prevista);
+  toast(atr ? `Devolução registrada! ⚠️ Com atraso.` : `"${l.titulo}" devolvido com sucesso!`, atr?'warning':'success');
+  renderEmprestimos();
+  document.getElementById('badge-emp').textContent = emprestimos.filter(e=>e.status==='Ativo').length;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   RELATÓRIO
+═══════════════════════════════════════════════════════════════ */
+function filtroRel(val, btn) {
+  filtroRelAtual = val;
+  document.querySelectorAll('#page-relatorio .btn-group-sm .btn').forEach(b => b.className = 'btn btn-outline-secondary btn-sm');
+  btn.className = 'btn btn-dark btn-sm';
+  renderRelatorio();
+}
+
+function renderRelatorio() {
+  const s = calcStats();
+  const perc = s.perc;
+
+  // Stat cards
+  document.getElementById('relCards').innerHTML = [
+    { l:'Total',       v:s.total,    t:'#1e40af', b:'#dbeafe', p:'' },
+    { l:'Disponíveis', v:s.disp,     t:'#065f46', b:'#d1fae5', p:`${perc}%` },
+    { l:'Emprestados', v:s.emp,      t:'#991b1b', b:'#fee2e2', p:`${100-perc}%` },
+    { l:'Atrasados',   v:s.atrasados,t:'#92400e', b:'#fef3c7', p:'' },
+  ].map(c=>`
+    <div class="col-6 col-md-3">
+      <div class="card h-100" style="border-top:4px solid ${c.t}">
+        <div class="card-body text-center py-3">
+          <div style="font-size:2.2rem;font-weight:800;color:${c.t}">${c.v}</div>
+          <div class="text-muted small">${c.l}</div>
+          ${c.p?`<div style="font-size:.75rem;font-weight:600;color:${c.t}">${c.p}</div>`:''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+
+  // Progress
+  document.getElementById('relPerc').textContent      = perc + '%';
+  document.getElementById('relProgBar').style.width   = perc + '%';
+  document.getElementById('relDispText').textContent  = `${s.disp} disponíveis`;
+  document.getElementById('relEmpText').textContent   = `${s.emp} emprestados`;
+
+  // Tabela
+  let lista = livros.map(l => {
+    const emp = emprestimos.find(e => e.livro_id === l.id && e.status === 'Ativo');
+    const u   = emp ? getUsuario(emp.usuario_id) : null;
+    return { ...l, emp, u, atrasado: emp ? isAtrasado(emp) : false };
+  });
+
+  if (filtroRelAtual === 'disp')  lista = lista.filter(x => x.status === 'Disponível');
+  if (filtroRelAtual === 'emp')   lista = lista.filter(x => x.status === 'Emprestado');
+  if (filtroRelAtual === 'atras') lista = lista.filter(x => x.atrasado);
+
+  document.getElementById('relCount').textContent = `${lista.length} registros`;
+
+  const tb = document.getElementById('tbRel');
+  if (!lista.length) {
+    tb.innerHTML = `<tr><td colspan="10" class="text-center py-5 text-muted">Nenhum registro encontrado.</td></tr>`;
+    return;
+  }
+  tb.innerHTML = lista.map(d => `
+    <tr style="${d.atrasado?'background:#fffbeb':''}">
+      <td><small class="text-muted">${d.id}</small></td>
+      <td>
+        <div class="fw-semibold" style="font-size:.88rem">${d.titulo}</div>
+        ${d.editora?`<div class="text-muted" style="font-size:.73rem">${d.editora}</div>`:''}
+      </td>
+      <td><small>${d.autor}</small></td>
+      <td>${d.genero?`<span class="badge rounded-pill" style="background:#ede9fe;color:#5b21b6;font-weight:600;font-size:.73rem">${d.genero}</span>`:''}</td>
+      <td><small>${d.ano||'—'}</small></td>
+      <td><span class="pill ${d.status==='Disponível'?'pill-disp':d.atrasado?'pill-atras':'pill-emp'}">${d.atrasado?'Atrasado':d.status}</span></td>
+      <td>${d.u?`<div><div style="font-size:.88rem;font-weight:500">${d.u.nome}</div><div class="text-muted" style="font-size:.73rem">${d.u.matricula||d.u.email}</div></div>`:'<span class="text-muted">—</span>'}</td>
+      <td><small>${fmtDate(d.emp?.data_emprestimo)}</small></td>
+      <td><small class="${d.atrasado?'text-danger fw-bold':''}">${fmtDate(d.emp?.data_prevista)}${d.atrasado?' ⚠️':''}</small></td>
+      <td>${d.status==='Emprestado'?`
+        <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border-radius:7px;font-size:.76rem" onclick="gerarComprovante(${d.id})" title="Gerar PDF">
+          <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+        </button>`:''}
+      </td>
+    </tr>
+  `).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   PDF (usando jsPDF via CDN)
+═══════════════════════════════════════════════════════════════ */
+function gerarPDF() {
+  if (typeof window.jspdf === 'undefined') {
+    // Carrega jsPDF dinamicamente
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = () => _gerarPDF();
+    document.head.appendChild(s);
+  } else { _gerarPDF(); }
+}
+
+function _gerarPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+  const W = doc.internal.pageSize.getWidth();
+  const H = doc.internal.pageSize.getHeight();
+  const s = calcStats();
+
+  // Header
+  doc.setFillColor(13,110,253);  doc.rect(0,0,W,38,'F');
+  doc.setFillColor(102,16,242); doc.rect(W-80,0,80,38,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(20); doc.setFont('helvetica','bold');
+  doc.text('BIBLIOTECAPRO', 14, 16);
+  doc.setFontSize(10); doc.setFont('helvetica','normal');
+  doc.text('Relatório de Status do Acervo', 14, 25);
+  doc.text('FATEC SP · Zona Leste · DSM · WEB3', 14, 33);
+  doc.setFontSize(8);
+  doc.text('Emitido em: ' + new Date().toLocaleString('pt-BR'), W-78, 20);
+  doc.text('Adriano R. de Araujo', W-78, 30);
+
+  // Stat boxes
+  doc.setTextColor(0);
+  const boxY = 46;
+  const boxes = [
+    {label:'Total',          val:s.total,    cor:[13,110,253]},
+    {label:'Disponíveis',    val:s.disp,     cor:[25,135,84]},
+    {label:'Emprestados',    val:s.emp,      cor:[220,53,69]},
+    {label:'Atrasados',      val:s.atrasados,cor:[255,193,7]},
+    {label:'% Disponível',   val:s.perc+'%', cor:[108,117,125]},
+  ];
+  const bw = (W-28)/boxes.length;
+  boxes.forEach((b,i) => {
+    const x = 14 + i*bw;
+    doc.setFillColor(...b.cor);
+    doc.roundedRect(x, boxY, bw-4, 22, 3,3,'F');
+    doc.setTextColor(255);
+    doc.setFontSize(16); doc.setFont('helvetica','bold');
+    doc.text(String(b.val), x+(bw-4)/2, boxY+13, {align:'center'});
+    doc.setFontSize(7); doc.setFont('helvetica','normal');
+    doc.text(b.label, x+(bw-4)/2, boxY+19, {align:'center'});
+  });
+
+  // Table data
+  doc.setTextColor(0); doc.setFontSize(10); doc.setFont('helvetica','bold');
+  doc.text('Detalhamento do Acervo', 14, boxY+30);
+
+  const rows = livros.map(l => {
+    const emp = emprestimos.find(e => e.livro_id === l.id && e.status === 'Ativo');
+    const u   = emp ? getUsuario(emp.usuario_id) : null;
+    return [
+      l.id, l.titulo.substring(0,30), l.autor.substring(0,20),
+      l.genero||'—', l.ano||'—', l.status,
+      u?.nome||'—',
+      fmtDate(emp?.data_emprestimo),
+      fmtDate(emp?.data_prevista),
+      emp && isAtrasado(emp) ? 'SIM' : 'Não'
+    ];
+  });
+
+  // Simple table (manual)
+  const cols = ['ID','Título','Autor','Gênero','Ano','Status','Usuário','Empréstimo','Previsão','Atrasado'];
+  const colW = [10,42,36,20,14,22,30,22,22,15];
+  let y = boxY+34;
+  // Header row
+  doc.setFillColor(26,35,50); doc.rect(14,y,W-28,8,'F');
+  doc.setTextColor(255); doc.setFontSize(7); doc.setFont('helvetica','bold');
+  let x=14;
+  cols.forEach((c,i) => { doc.text(c, x+1, y+5.5); x+=colW[i]; });
+  y += 8;
+
+  rows.forEach((row,ri) => {
+    if (y > H-18) { doc.addPage(); y = 10; }
+    doc.setFillColor(ri%2===0?255:248); doc.rect(14,y,W-28,7,'F');
+    doc.setTextColor(ri%2===0?30:30); doc.setFontSize(7); doc.setFont('helvetica','normal');
+    x=14;
+    row.forEach((cell,i) => {
+      const txt = String(cell).substring(0,colW[i]/2+1);
+      if (i===5) {
+        doc.setTextColor(cell==='Disponível'?[25,135,84]:[220,53,69]);
+        doc.setFont('helvetica','bold');
+      } else { doc.setTextColor(30); doc.setFont('helvetica','normal'); }
+      doc.text(txt, x+1, y+5);
+      x+=colW[i];
+    });
+    y+=7;
+  });
+
+  // Footer
+  const pg = doc.internal.getNumberOfPages();
+  for(let p=1;p<=pg;p++) {
+    doc.setPage(p);
+    doc.setFillColor(240,244,248); doc.rect(0,H-10,W,10,'F');
+    doc.setFontSize(7); doc.setTextColor(100); doc.setFont('helvetica','normal');
+    doc.text('BibliotecaPro © FATEC SP Zona Leste 2025', 14, H-4);
+    doc.text(`Página ${p} de ${pg}`, W-14, H-4, {align:'right'});
+  }
+
+  const dh = new Date().toLocaleDateString('pt-BR').replace(/\//g,'-');
+  doc.save(`relatorio-biblioteca-${dh}.pdf`);
+  toast('PDF gerado com sucesso!', 'success');
+}
+
+function gerarComprovante(livroId) {
+  if (typeof window.jspdf === 'undefined') {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+    s.onload = () => _gerarComprovante(livroId);
+    document.head.appendChild(s);
+  } else { _gerarComprovante(livroId); }
+}
+
+function _gerarComprovante(livroId) {
+  const { jsPDF } = window.jspdf;
+  const l   = getLivro(livroId);
+  const emp = emprestimos.find(e => e.livro_id === livroId && e.status === 'Ativo');
+  const u   = emp ? getUsuario(emp.usuario_id) : null;
+  const doc = new jsPDF({ unit:'mm', format:'a5' });
+  const W   = doc.internal.pageSize.getWidth();
+
+  doc.setFillColor(13,110,253); doc.rect(0,0,W,32,'F');
+  doc.setTextColor(255); doc.setFontSize(14); doc.setFont('helvetica','bold');
+  doc.text('COMPROVANTE DE DEVOLUÇÃO', W/2, 12, {align:'center'});
+  doc.setFontSize(8); doc.setFont('helvetica','normal');
+  doc.text('BibliotecaPro · FATEC SP · Zona Leste', W/2, 20, {align:'center'});
+  doc.text(`Protocolo: EMP-${emp?.id||'?'}`, W/2, 28, {align:'center'});
+
+  doc.setFillColor(248,250,252); doc.roundedRect(10,36,W-20,70,3,3,'F');
+  doc.setTextColor(0);
+  let y=44;
+  const lin=(label,val)=>{ doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(label,12,y); doc.setFont('helvetica','normal'); doc.text(String(val||'—'),52,y); y+=8; };
+  lin('Livro:',          l?.titulo);
+  lin('Autor:',          l?.autor);
+  lin('Usuário:',        u?.nome);
+  lin('Matrícula:',      u?.matricula);
+  lin('Data Empréstimo:',fmtDate(emp?.data_emprestimo));
+  lin('Previsão Dev.:',  fmtDate(emp?.data_prevista));
+  lin('Data Devolução:', new Date().toLocaleString('pt-BR'));
+  lin('Status:',         '✅ Devolvido no Prazo');
+
+  doc.save(`comprovante-${l?.id||'0'}.pdf`);
+  toast('Comprovante PDF gerado!', 'success');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SWAGGER MOCK
+═══════════════════════════════════════════════════════════════ */
+const SWAGGER_ENDPOINTS = [
+  { tag:'Dashboard', color:'#0d6efd', endpoints:[
+    { method:'GET', path:'/api/dashboard', desc:'Estatísticas gerais do sistema', resp:'200: { total_livros, disponiveis, emprestados, ... }' },
+  ]},
+  { tag:'Livros', color:'#198754', endpoints:[
+    { method:'GET',    path:'/api/livros',       desc:'Lista livros com filtros (busca, status, genero)', resp:'200: Array de Livros' },
+    { method:'GET',    path:'/api/livros/:id',   desc:'Busca livro por ID',               resp:'200: Livro | 404' },
+    { method:'POST',   path:'/api/livros',       desc:'Cadastra novo livro (titulo, autor obrigatórios)', resp:'201: Livro criado' },
+    { method:'PUT',    path:'/api/livros/:id',   desc:'Atualiza dados do livro',           resp:'200: Livro atualizado' },
+    { method:'DELETE', path:'/api/livros/:id',   desc:'Remove livro (somente se Disponível)', resp:'200 | 409: Livro emprestado' },
+  ]},
+  { tag:'Usuários', color:'#6610f2', endpoints:[
+    { method:'GET',    path:'/api/usuarios',     desc:'Lista usuários com busca opcional',  resp:'200: Array de Usuários' },
+    { method:'GET',    path:'/api/usuarios/:id', desc:'Busca usuário por ID',              resp:'200: Usuário | 404' },
+    { method:'POST',   path:'/api/usuarios',     desc:'Cadastra usuário (nome, email obrigatórios)', resp:'201: Usuário criado' },
+    { method:'PUT',    path:'/api/usuarios/:id', desc:'Atualiza dados do usuário',         resp:'200: Usuário atualizado' },
+    { method:'DELETE', path:'/api/usuarios/:id', desc:'Remove usuário',                   resp:'200: Removido' },
+  ]},
+  { tag:'Empréstimos', color:'#dc3545', endpoints:[
+    { method:'GET',  path:'/api/emprestimos',              desc:'Lista empréstimos (status, usuarioId, livroId)', resp:'200: Array de Empréstimos' },
+    { method:'POST', path:'/api/emprestimos',              desc:'Registra empréstimo (livro_id, usuario_id)',     resp:'201 | 409: Livro já emprestado' },
+    { method:'PUT',  path:'/api/emprestimos/:id/devolver', desc:'Registra devolução do livro',                   resp:'200: Devolução registrada' },
+  ]},
+  { tag:'Relatórios', color:'#fd7e14', endpoints:[
+    { method:'GET', path:'/api/relatorio/status',     desc:'Status completo de todos os livros',    resp:'200: Array completo' },
+    { method:'GET', path:'/api/relatorio/emprestados',desc:'Lista apenas livros emprestados agora', resp:'200: Array emprestados ativos' },
+  ]},
+];
+
+const METHOD_COLORS = { GET:'#198754', POST:'#0d6efd', PUT:'#fd7e14', DELETE:'#dc3545' };
+
+function renderSwagger() {
+  document.getElementById('swaggerEndpoints').innerHTML = SWAGGER_ENDPOINTS.map(group => `
+    <div class="mb-4">
+      <h6 class="fw-bold mb-3 d-flex align-items-center gap-2">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${group.color}"></span>
+        ${group.tag}
+      </h6>
+      ${group.endpoints.map(ep => `
+        <div class="d-flex align-items-start gap-3 p-3 mb-2 rounded-3" style="background:#f8fafc;border:1px solid #e9ecef">
+          <span class="badge fw-bold" style="background:${METHOD_COLORS[ep.method]};font-size:.75rem;min-width:58px;text-align:center;letter-spacing:.03em;padding:5px 8px">${ep.method}</span>
+          <div class="flex-grow-1">
+            <code style="color:#1a2332;font-size:.88rem;font-weight:600">${ep.path}</code>
+            <div class="text-muted small mt-1">${ep.desc}</div>
+            <div style="font-size:.75rem;color:#6610f2;margin-top:3px"><i class="bi bi-arrow-return-right me-1"></i>${ep.resp}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  renderDashboard();
+});
+</script>
+
+</body>
+</html>
